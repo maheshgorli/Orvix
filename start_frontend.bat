@@ -5,7 +5,7 @@ echo =========================
 echo Starting Frontend...
 echo =========================
 
-cd /d "D:\projectP\frontend"
+cd /d "%~dp0frontend"
 
 npm run dev
 

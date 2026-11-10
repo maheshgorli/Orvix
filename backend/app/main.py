@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-IMAGES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "images")
-os.makedirs(IMAGES_DIR, exist_ok=True)
-app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
+IMAGES_DIR = Path(__file__).resolve().parent.parent / "images"
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(api_router)          # /api/*  — primary REST API

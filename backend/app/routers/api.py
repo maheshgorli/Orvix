@@ -223,6 +223,8 @@ def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
         )
     except ValueError as exc:
         return ApiResponse.fail(error=str(exc), message="Invalid request parameters.")
+    except EnvironmentError as exc:
+        return ApiResponse.fail(error=str(exc), message="Sentinel Hub credentials are not configured.")
     except AuthenticationError as exc:
         return ApiResponse.fail(error=str(exc), message="Sentinel Hub authentication failed.")
     except SentinelServiceError as exc:
