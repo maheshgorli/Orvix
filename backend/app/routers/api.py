@@ -47,6 +47,8 @@ from app.services.sentinel_service import (
     AuthenticationError,
 )
 from app.services.token_service import token_service
+from app.services.db_service import db_service
+from app.services.analysis import analysis_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["API"])
@@ -79,7 +81,7 @@ def _saved_to_image_data(saved, extra: dict | None = None) -> ImageData:
     "/status",
     response_model=ApiResponse[StatusData],
     summary="Platform health check",
-    description="Reports reachability of NASA EONET and Sentinel Hub OAuth concurrently.",
+    description="Reports reachability of NASA EONET, Sentinel Hub OAuth, and MongoDB database concurrently.",
 )
 async def get_status() -> ApiResponse[StatusData]:
     def _check_sentinel() -> tuple[ServiceStatus, bool]:
@@ -105,10 +107,12 @@ async def get_status() -> ApiResponse[StatusData]:
     loop = asyncio.get_running_loop()
     sentinel_task = loop.run_in_executor(None, _check_sentinel)
     nasa_task = nasa_service.check_api_status_async()
+    db_task = db_service.check_connection_async()
 
-    nasa_status, (sentinel_status, sentinel_ok) = await asyncio.gather(
+    nasa_status, (sentinel_status, sentinel_ok), db_status = await asyncio.gather(
         nasa_task,
         sentinel_task,
+        db_task,
     )
 
     services: list[ServiceStatus] = [
@@ -119,12 +123,18 @@ async def get_status() -> ApiResponse[StatusData]:
             message=nasa_status["message"],
         ),
         sentinel_status,
+        ServiceStatus(
+            name="MongoDB Database",
+            reachable=db_status["reachable"],
+            status_code=200 if db_status["reachable"] else None,
+            message=db_status["message"],
+        ),
     ]
 
     all_ok = nasa_status["reachable"] and sentinel_ok
     return ApiResponse.ok(
         data=StatusData(services=services),
-        message="All services operational." if all_ok else "One or more services unavailable.",
+        message="All services operational." if (all_ok and db_status["reachable"]) else "One or more services unavailable or unconfigured.",
     )
 
 
@@ -196,10 +206,10 @@ def get_latest_image() -> ApiResponse[ImageData]:
     summary="Fetch and save a Sentinel-2 image",
     description=(
         "Downloads a true-colour Sentinel-2 image for the given coordinates "
-        "and date range, then saves it to disk."
+        "and date range, saves the image to disk, and records metadata in the database."
     ),
 )
-def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
+async def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
     logger.info(
         "POST /api/image — lat=%.4f lon=%.4f  %s→%s  res=%dm",
         body.latitude, body.longitude,
@@ -229,14 +239,19 @@ def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
             longitude=body.longitude,
         )
     except ValueError as exc:
+        await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Invalid request parameters.")
     except EnvironmentError as exc:
+        await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Sentinel Hub credentials are not configured.")
     except AuthenticationError as exc:
+        await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Sentinel Hub authentication failed.")
     except SentinelServiceError as exc:
+        await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Sentinel Hub imagery request failed.")
     except OSError as exc:
+        await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Failed to save image to disk.")
 
     extra = {
@@ -247,8 +262,21 @@ def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
         "bbox":              result.meta.bbox,
         "data_collection":   result.meta.data_collection,
     }
+    image_data_obj = _saved_to_image_data(saved, extra)
+
+    # Persist metadata to database (image file remains on disk)
+    try:
+        await db_service.save_image_metadata(image_data_obj.model_dump())
+        await db_service.log_acquisition(
+            body.model_dump(),
+            status="success",
+            result_summary={"filename": saved.filename, "file_size_bytes": saved.file_size_bytes},
+        )
+    except Exception as exc:
+        logger.warning("Database persistence error for image '%s': %s", saved.filename, exc)
+
     return ApiResponse.ok(
-        data=_saved_to_image_data(saved, extra),
+        data=image_data_obj,
         message=f"Image saved — {saved.filename} ({saved.file_size_bytes:,} bytes).",
     )
 
@@ -326,6 +354,13 @@ async def get_disasters(
             date=ed.get("date"),
             source_url=ed.get("source_url"),
         ))
+
+    # Persist events to MongoDB (deduplicated by event_id)
+    try:
+        raw_events = [e.to_dict() for e in events]
+        await db_service.bulk_upsert_disaster_events(raw_events)
+    except Exception as exc:
+        logger.warning("Database bulk upsert error for disaster events: %s", exc)
 
     return ApiResponse.ok(
         data=DisastersData(
@@ -463,9 +498,36 @@ async def get_monitor(
         downloaded=downloaded,
         failed=failed,
     )
+
+    # Persist monitoring session record in MongoDB
+    try:
+        await db_service.save_monitoring_session(monitor_result.model_dump())
+    except Exception as exc:
+        logger.warning("Failed to record monitoring session in DB: %s", exc)
+
     return ApiResponse.ok(
         data=monitor_result,
         message=f"Monitoring completed — {len(downloaded)} image(s) downloaded, {len(failed)} failed.",
+    )
+
+
+# ── GET /api/analysis/status ───────────────────────────────────────────────────
+
+@router.get(
+    "/analysis/status",
+    response_model=ApiResponse[dict],
+    summary="Image analysis pipeline component status",
+    description=(
+        "Reports the implementation status of all image analysis components: "
+        "validation, preprocessing, spectral indices (NDVI, NBR), model inference, and detection results. "
+        "Unimplemented components are strictly labelled 'pending' with no fake data."
+    ),
+)
+def get_analysis_status() -> ApiResponse[dict]:
+    status = analysis_pipeline.get_status()
+    return ApiResponse.ok(
+        data=status,
+        message="Analysis pipeline specifications defined; implementation status reported.",
     )
 
 

@@ -86,6 +86,16 @@ class _Settings:
             return "DEMO_KEY"
         return key
 
+    # --- MongoDB Persistence (optional — graceful degradation if unconfigured) ---
+
+    @property
+    def mongodb_uri(self) -> str:
+        return _optional("MONGODB_URI", "")
+
+    @property
+    def mongodb_db_name(self) -> str:
+        return _optional("MONGODB_DB_NAME", "orvix")
+
     # --- Sentinel Hub CDSE endpoints (not secrets, but centralised here) ---
 
     SENTINEL_BASE_URL: str = "https://sh.dataspace.copernicus.eu"
@@ -100,7 +110,7 @@ class _Settings:
 
     def log_loaded_vars(self) -> None:
         """Log which env-var names are present (never logs values)."""
-        names = ["SENTINEL_CLIENT_ID", "SENTINEL_CLIENT_SECRET", "NASA_API_KEY"]
+        names = ["SENTINEL_CLIENT_ID", "SENTINEL_CLIENT_SECRET", "NASA_API_KEY", "MONGODB_URI"]
         loaded   = [n for n in names if os.getenv(n, "").strip()]
         missing  = [n for n in names if not os.getenv(n, "").strip()]
         if loaded:
