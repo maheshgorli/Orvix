@@ -15,10 +15,10 @@ to maintain consistent field names across every endpoint.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Generic, Optional, TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 T = TypeVar("T")
 
@@ -90,6 +90,19 @@ class ImageRequest(BaseModel):
         except ValueError:
             raise ValueError(f"Expected YYYY-MM-DD, got: {v!r}")
         return v
+
+    @model_validator(mode="after")
+    def _validate_date_range(self) -> "ImageRequest":
+        d_from = datetime.strptime(self.date_from, "%Y-%m-%d").date()
+        d_to = datetime.strptime(self.date_to, "%Y-%m-%d").date()
+        today = date.today()
+        if d_to > today:
+            raise ValueError(f"date_to ({self.date_to}) cannot be in the future (today is {today.isoformat()}).")
+        if d_from > d_to:
+            raise ValueError(f"date_from ({self.date_from}) must be on or before date_to ({self.date_to}).")
+        if (d_to - d_from).days > 365:
+            raise ValueError(f"Acquisition date range cannot exceed 365 days (requested {(d_to - d_from).days} days).")
+        return self
 
 
 class ImageData(BaseModel):

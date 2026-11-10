@@ -278,9 +278,18 @@ class _SentinelService:
             raise ValueError(
                 f"Invalid date format — expected YYYY-MM-DD, got: '{exc}'"
             ) from exc
+        today = _date.today()
+        if d_to > today:
+            raise ValueError(
+                f"date_to ({date_to}) cannot be in the future (today is {today.isoformat()})."
+            )
         if d_from > d_to:
             raise ValueError(
                 f"date_from ({date_from}) must be before date_to ({date_to})."
+            )
+        if (d_to - d_from).days > 365:
+            raise ValueError(
+                f"Acquisition date range cannot exceed 365 days (requested {(d_to - d_from).days} days)."
             )
 
     @staticmethod

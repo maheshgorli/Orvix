@@ -18,6 +18,7 @@ DELETE /api/image/{id}      — delete a stored image by filename
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -78,41 +79,47 @@ def _saved_to_image_data(saved, extra: dict | None = None) -> ImageData:
     "/status",
     response_model=ApiResponse[StatusData],
     summary="Platform health check",
-    description="Reports reachability of NASA EONET and Sentinel Hub OAuth.",
+    description="Reports reachability of NASA EONET and Sentinel Hub OAuth concurrently.",
 )
-def get_status() -> ApiResponse[StatusData]:
-    services: list[ServiceStatus] = []
+async def get_status() -> ApiResponse[StatusData]:
+    def _check_sentinel() -> tuple[ServiceStatus, bool]:
+        try:
+            token = token_service.get_token()
+            return ServiceStatus(
+                name="Sentinel Hub (CDSE)",
+                reachable=True,
+                status_code=200,
+                message=(
+                    f"Authenticated — token valid for "
+                    f"{round(token.seconds_remaining)} s."
+                ),
+            ), True
+        except (AuthenticationError, EnvironmentError) as exc:
+            return ServiceStatus(
+                name="Sentinel Hub (CDSE)",
+                reachable=False,
+                status_code=None,
+                message=str(exc),
+            ), False
 
-    # NASA EONET
-    nasa_status = nasa_service.check_api_status()
-    services.append(ServiceStatus(
-        name="NASA EONET",
-        reachable=nasa_status["reachable"],
-        status_code=nasa_status.get("status_code"),
-        message=nasa_status["message"],
-    ))
+    loop = asyncio.get_running_loop()
+    sentinel_task = loop.run_in_executor(None, _check_sentinel)
+    nasa_task = nasa_service.check_api_status_async()
 
-    # Sentinel Hub OAuth
-    try:
-        token = token_service.get_token()
-        services.append(ServiceStatus(
-            name="Sentinel Hub (CDSE)",
-            reachable=True,
-            status_code=200,
-            message=(
-                f"Authenticated — token valid for "
-                f"{round(token.seconds_remaining)} s."
-            ),
-        ))
-        sentinel_ok = True
-    except (AuthenticationError, EnvironmentError) as exc:
-        services.append(ServiceStatus(
-            name="Sentinel Hub (CDSE)",
-            reachable=False,
-            status_code=None,
-            message=str(exc),
-        ))
-        sentinel_ok = False
+    nasa_status, (sentinel_status, sentinel_ok) = await asyncio.gather(
+        nasa_task,
+        sentinel_task,
+    )
+
+    services: list[ServiceStatus] = [
+        ServiceStatus(
+            name="NASA EONET",
+            reachable=nasa_status["reachable"],
+            status_code=nasa_status.get("status_code"),
+            message=nasa_status["message"],
+        ),
+        sentinel_status,
+    ]
 
     all_ok = nasa_status["reachable"] and sentinel_ok
     return ApiResponse.ok(
@@ -270,11 +277,11 @@ def get_gallery() -> ApiResponse[GalleryData]:
     response_model=ApiResponse[DisastersData],
     summary="Active NASA EONET disaster events",
     description=(
-        "Returns currently active wildfire and severe-storm events from NASA EONET. "
+        "Returns currently active wildfire and severe-storm events from NASA EONET concurrently. "
         "Use the `days` parameter to restrict to events within the last N days."
     ),
 )
-def get_disasters(
+async def get_disasters(
     days: int = Query(
         default=None, ge=1, le=365,
         description="Restrict to events within the last N days (optional).",
@@ -287,11 +294,13 @@ def get_disasters(
 ) -> ApiResponse[DisastersData]:
     try:
         if category:
-            events = nasa_service.fetch_events(category_id=category, days=days)
+            events = await nasa_service.fetch_events_async(category_id=category, days=days)
         else:
-            wildfires = nasa_service.fetch_wildfires(days=days)
-            storms    = nasa_service.fetch_storms(days=days)
-            events    = wildfires + storms
+            wildfires, storms = await asyncio.gather(
+                nasa_service.fetch_wildfires_async(days=days),
+                nasa_service.fetch_storms_async(days=days),
+            )
+            events = wildfires + storms
     except NasaServiceError as exc:
         logger.error("GET /api/disasters failed: %s", exc)
         return ApiResponse.fail(
@@ -366,6 +375,97 @@ def get_history(
     return ApiResponse.ok(
         data=GalleryData(total=len(image_data), images=image_data),
         message=f"{len(image_data)} image(s) in history{filter_note}.",
+    )
+
+
+# ── GET /api/monitor ───────────────────────────────────────────────────────────
+
+@router.get(
+    "/monitor",
+    response_model=ApiResponse[MonitorData],
+    summary="Active disasters monitoring and satellite acquisition",
+    description=(
+        "Fetches active wildfire and storm events concurrently from NASA EONET "
+        "and attempts Sentinel-2 imagery download for events with valid coordinates."
+    ),
+)
+async def get_monitor(
+    days: int = Query(
+        default=None, ge=1, le=90,
+        description="Restrict to events within the last N days (optional).",
+    ),
+    max_images: int = Query(
+        default=5, ge=1, le=20,
+        description="Maximum number of satellite images to attempt downloading.",
+    ),
+) -> ApiResponse[MonitorData]:
+    try:
+        wildfires, storms = await asyncio.gather(
+            nasa_service.fetch_wildfires_async(days=days),
+            nasa_service.fetch_storms_async(days=days),
+        )
+    except NasaServiceError as exc:
+        logger.error("GET /api/monitor event fetch failed: %s", exc)
+        return ApiResponse.fail(
+            error=str(exc),
+            message="Failed to fetch disaster events from NASA EONET.",
+        )
+
+    all_events = [("wildfire", e) for e in wildfires] + [("storm", e) for e in storms]
+    downloaded: list[MonitorDownloaded] = []
+    failed: list[MonitorFailed] = []
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    candidates = [
+        (etype, ev) for etype, ev in all_events
+        if ev.coordinates and len(ev.coordinates) >= 2 and ev.latest_geometry is not None
+    ][:max_images]
+
+    for event_type, event in candidates:
+        geo = event.latest_geometry
+        if not geo:
+            continue
+        lat, lon = geo.latitude, geo.longitude
+        filename = f"{event_type}_{timestamp}_lat{lat:.4f}_lon{lon:.4f}.png"
+
+        try:
+            result = sentinel_service.fetch_image(latitude=lat, longitude=lon)
+            saved = image_service.save(
+                array=result.array,
+                event_type=event_type,
+                latitude=lat,
+                longitude=lon,
+                filename=filename,
+            )
+            downloaded.append(MonitorDownloaded(
+                event_id=event.event_id,
+                title=event.title,
+                type=event_type,
+                image_url=f"http://127.0.0.1:8000/{saved.image_path}",
+                filename=saved.filename,
+                latitude=lat,
+                longitude=lon,
+            ))
+        except (SentinelServiceError, AuthenticationError, EnvironmentError, OSError, ValueError) as exc:
+            logger.warning("Image download failed for %s: %s", event.event_id, exc)
+            failed.append(MonitorFailed(
+                event_id=event.event_id,
+                title=event.title,
+                error=str(exc),
+            ))
+
+    monitor_result = MonitorData(
+        wildfires=len(wildfires),
+        storms=len(storms),
+        total_events=len(all_events),
+        images_downloaded=len(downloaded),
+        images_failed=len(failed),
+        downloaded=downloaded,
+        failed=failed,
+    )
+    return ApiResponse.ok(
+        data=monitor_result,
+        message=f"Monitoring completed — {len(downloaded)} image(s) downloaded, {len(failed)} failed.",
     )
 
 

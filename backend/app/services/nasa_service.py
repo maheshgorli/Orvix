@@ -18,6 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+import httpx
 import requests
 
 from app.config import settings
@@ -167,6 +168,63 @@ class _NasaService:
             groups.setdefault(event.category_id, []).append(event)
         return groups
 
+    async def fetch_events_async(
+        self,
+        *,
+        category_id: Optional[str] = None,
+        status: str = "open",
+        limit: int = 300,
+        days: Optional[int] = None,
+    ) -> list[NasaEvent]:
+        """Async fetch events from EONET, optionally filtered by category."""
+        raw = await self._get_raw_events_async(status=status, limit=limit, days=days)
+        events = [self._parse_event(e) for e in raw]
+
+        if category_id:
+            events = [e for e in events if e.category_id == category_id]
+
+        logger.info(
+            "EONET async fetch — category: %s, status: %s, returned: %d event(s).",
+            category_id or "all",
+            status,
+            len(events),
+        )
+        return events
+
+    async def fetch_wildfires_async(self, **kwargs) -> list[NasaEvent]:
+        """Async shortcut for fetch_events_async(category_id='wildfires')."""
+        return await self.fetch_events_async(category_id=self.CATEGORY_WILDFIRES, **kwargs)
+
+    async def fetch_storms_async(self, **kwargs) -> list[NasaEvent]:
+        """Async shortcut for fetch_events_async(category_id='severeStorms')."""
+        return await self.fetch_events_async(category_id=self.CATEGORY_STORMS, **kwargs)
+
+    async def check_api_status_async(self) -> dict:
+        """Async ping the EONET endpoint using httpx."""
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(
+                    settings.NASA_EONET_URL,
+                    params={"api_key": settings.nasa_api_key, "limit": 1},
+                )
+                return {
+                    "reachable":   True,
+                    "status_code": resp.status_code,
+                    "message":     "NASA EONET API is reachable.",
+                }
+        except httpx.TimeoutException:
+            return {
+                "reachable":   False,
+                "status_code": None,
+                "message":     "NASA EONET request timed out.",
+            }
+        except httpx.RequestError as exc:
+            return {
+                "reachable":   False,
+                "status_code": None,
+                "message":     f"Cannot reach NASA EONET: {exc}",
+            }
+
     def check_api_status(self) -> dict:
         """
         Ping the EONET endpoint and return connection health info.
@@ -217,11 +275,11 @@ class _NasaService:
         logger.debug("GET %s  params=%s", settings.NASA_EONET_URL, {k: v for k, v in params.items() if k != "api_key"})
 
         try:
-            response = requests.get(settings.NASA_EONET_URL, params=params, timeout=12)
+            response = requests.get(settings.NASA_EONET_URL, params=params, timeout=25)
             response.raise_for_status()
         except requests.Timeout:
             raise NasaServiceError(
-                f"NASA EONET request timed out (12 s). "
+                f"NASA EONET request timed out (25 s). "
                 f"Endpoint: {settings.NASA_EONET_URL}"
             )
         except requests.HTTPError as exc:
@@ -237,6 +295,58 @@ class _NasaService:
             ) from exc
         except requests.RequestException as exc:
             raise NasaServiceError(f"Unexpected error fetching EONET data: {exc}") from exc
+
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise NasaServiceError(
+                f"EONET returned non-JSON response: {response.text[:200]}"
+            ) from exc
+
+        if "events" not in body:
+            raise NasaServiceError(
+                f"EONET response missing 'events' key. Got: {list(body.keys())}"
+            )
+
+        return body["events"]
+
+    async def _get_raw_events_async(
+        self,
+        status: str,
+        limit: int,
+        days: Optional[int],
+    ) -> list[dict]:
+        """Make the async HTTP request using httpx and return the raw events list."""
+        params: dict = {
+            "api_key": settings.nasa_api_key,
+            "status":  status,
+            "limit":   limit,
+        }
+        if days:
+            params["days"] = days
+
+        logger.debug("Async GET %s  params=%s", settings.NASA_EONET_URL, {k: v for k, v in params.items() if k != "api_key"})
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                response = await client.get(settings.NASA_EONET_URL, params=params)
+                response.raise_for_status()
+        except httpx.TimeoutException:
+            raise NasaServiceError(
+                f"NASA EONET request timed out (12 s). "
+                f"Endpoint: {settings.NASA_EONET_URL}"
+            )
+        except httpx.HTTPStatusError as exc:
+            resp = exc.response
+            st = str(resp.status_code) if resp is not None else "unknown"
+            body = resp.text[:200] if resp is not None else "No response body"
+            raise NasaServiceError(
+                f"NASA EONET returned HTTP {st}: {body}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise NasaServiceError(
+                f"Cannot connect to NASA EONET ({settings.NASA_EONET_URL}): {exc}"
+            ) from exc
 
         try:
             body = response.json()

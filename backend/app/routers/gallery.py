@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/gallery")
+@router.get("/gallery", deprecated=True, tags=["Legacy"])
 def get_gallery():
-    """Return metadata for every stored image in backend/images/, newest first."""
+    """(Deprecated) Return metadata for every stored image in backend/images/, newest first. Use GET /api/gallery instead."""
     images = image_service.list_images()
     return [img.to_dict() for img in images]

@@ -49,32 +49,32 @@ router = APIRouter()
 
 # ── NASA / EONET endpoints ────────────────────────────────────────────────────
 
-@router.get("/satellite")
+@router.get("/satellite", deprecated=True, tags=["Legacy"])
 def satellite():
-    """EONET API reachability check."""
+    """(Deprecated) EONET API reachability check. Use GET /api/status instead."""
     return nasa_service.check_api_status()
 
 
-@router.get("/wildfires")
-def get_wildfires(
+@router.get("/wildfires", deprecated=True, tags=["Legacy"])
+async def get_wildfires(
     days: int = Query(default=None, ge=1, le=365, description="Restrict to events within the last N days"),
 ):
-    """Return active wildfire events from NASA EONET."""
+    """(Deprecated) Return active wildfire events from NASA EONET. Use GET /api/disasters?category=wildfires instead."""
     try:
-        events = nasa_service.fetch_wildfires(days=days)
+        events = await nasa_service.fetch_wildfires_async(days=days)
     except NasaServiceError as exc:
         logger.error("Wildfire fetch failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc))
     return [e.to_dict() for e in events]
 
 
-@router.get("/storms")
-def get_storms(
+@router.get("/storms", deprecated=True, tags=["Legacy"])
+async def get_storms(
     days: int = Query(default=None, ge=1, le=365, description="Restrict to events within the last N days"),
 ):
-    """Return active severe-storm events from NASA EONET."""
+    """(Deprecated) Return active severe-storm events from NASA EONET. Use GET /api/disasters?category=severeStorms instead."""
     try:
-        events = nasa_service.fetch_storms(days=days)
+        events = await nasa_service.fetch_storms_async(days=days)
     except NasaServiceError as exc:
         logger.error("Storm fetch failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc))
@@ -83,9 +83,9 @@ def get_storms(
 
 # ── Sentinel Hub endpoints ────────────────────────────────────────────────────
 
-@router.get("/sentinel-test")
+@router.get("/sentinel-test", deprecated=True, tags=["Legacy"])
 def sentinel_test():
-    """Validate Sentinel Hub OAuth credentials."""
+    """(Deprecated) Validate Sentinel Hub OAuth credentials. Use GET /api/status or GET /api/token instead."""
     try:
         token = sentinel_service.get_token()
     except EnvironmentError as exc:
@@ -100,14 +100,9 @@ def sentinel_test():
     }
 
 
-@router.get("/auth/token")
+@router.get("/auth/token", deprecated=True, tags=["Legacy"])
 def auth_token():
-    """
-    Return the current (cached) CDSE OAuth token summary.
-
-    The access_token value is redacted — only the first 10 characters
-    are shown.  The full token is used internally.
-    """
+    """(Deprecated) Return the current (cached) CDSE OAuth token summary. Use GET /api/token instead."""
     try:
         token = token_service.get_token()
     except EnvironmentError as exc:
@@ -117,7 +112,7 @@ def auth_token():
     return {"success": True, **token.redacted_summary()}
 
 
-@router.get("/satellite-image")
+@router.get("/satellite-image", deprecated=True, tags=["Legacy"])
 def satellite_image(
     latitude:  float = Query(default=DEFAULT_LATITUDE,  ge=-90,   le=90,   description="Centre latitude"),
     longitude: float = Query(default=DEFAULT_LONGITUDE, ge=-180,  le=180,  description="Centre longitude"),
@@ -126,11 +121,7 @@ def satellite_image(
     resolution: int  = Query(default=DEFAULT_RESOLUTION, ge=10, le=1000,   description="Metres per pixel"),
     bbox_size: float = Query(default=DEFAULT_BBOX_SIZE,  gt=0,  le=5.0,    description="BBox half-extent in degrees"),
 ):
-    """
-    Download a single Sentinel-2 true-colour image and save it to disk.
-
-    Returns the image URL and full metadata.
-    """
+    """(Deprecated) Download a single Sentinel-2 true-colour image and save it to disk. Use POST /api/image instead."""
     try:
         result = sentinel_service.fetch_image(
             latitude=latitude,
@@ -166,78 +157,23 @@ def satellite_image(
     }
 
 
-@router.get("/monitor")
-def monitor(
+@router.get("/monitor", deprecated=True, tags=["Legacy"])
+async def monitor(
     days: int = Query(default=None, ge=1, le=90, description="Restrict to events within the last N days"),
 ):
-    """
-    Fetch active wildfire + storm events and download a Sentinel-2 image
-    for each event that has valid coordinates.
-
-    Returns a summary with counts and per-image details.
-    """
-    # Step 1 — fetch events
-    try:
-        wildfires = nasa_service.fetch_wildfires(days=days)
-        storms    = nasa_service.fetch_storms(days=days)
-    except NasaServiceError as exc:
-        raise HTTPException(status_code=502, detail=f"NASA EONET error: {exc}")
-
-    all_events = [("wildfire", e) for e in wildfires] + [("storm", e) for e in storms]
-
-    downloaded = []
-    failed     = []
-
-    # Step 2 — download an image for each event with valid coordinates
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
-
-    for event_type, event in all_events:
-        coords = event.coordinates
-        if not coords or len(coords) < 2:
-            logger.debug("Skipping event %s — no coordinates.", event.event_id)
-            continue
-
-        geo = event.latest_geometry
-        if geo is None:
-            logger.debug("Skipping event %s — no geometry.", event.event_id)
-            continue
-
-        lat, lon = geo.latitude, geo.longitude
-        filename = f"{event_type}_{timestamp}_lat{lat:.4f}_lon{lon:.4f}.png"
-
-        try:
-            result = sentinel_service.fetch_image(latitude=lat, longitude=lon)
-            saved  = image_service.save(
-                array=result.array,
-                event_type=event_type,
-                latitude=lat,
-                longitude=lon,
-                filename=filename,
-            )
-            downloaded.append({
-                "event_id":  event.event_id,
-                "title":     event.title,
-                "type":      event_type,
-                "image_url": f"http://127.0.0.1:8000/{saved.image_path}",
-                "filename":  saved.filename,
-                "latitude":  lat,
-                "longitude": lon,
-            })
-        except (SentinelServiceError, AuthenticationError, EnvironmentError, OSError) as exc:
-            logger.warning("Image download failed for %s: %s", event.event_id, exc)
-            failed.append({
-                "event_id": event.event_id,
-                "title":    event.title,
-                "error":    str(exc),
-            })
-
+    """(Deprecated) Fetch active wildfire + storm events and download a Sentinel-2 image. Use GET /api/monitor instead."""
+    from app.routers.api import get_monitor
+    res = await get_monitor(days=days)
+    if not res.success or res.data is None:
+        raise HTTPException(status_code=502, detail=res.error or res.message)
+    d = res.data
     return {
-        "success":          True,
-        "wildfires":        len(wildfires),
-        "storms":           len(storms),
-        "total_events":     len(all_events),
-        "images_downloaded": len(downloaded),
-        "images_failed":    len(failed),
-        "downloaded":       downloaded,
-        "failed":           failed,
+        "success":           True,
+        "wildfires":        d.wildfires,
+        "storms":           d.storms,
+        "total_events":     d.total_events,
+        "images_downloaded": d.images_downloaded,
+        "images_failed":    d.images_failed,
+        "downloaded":       [item.model_dump() for item in d.downloaded],
+        "failed":           [item.model_dump() for item in d.failed],
     }
