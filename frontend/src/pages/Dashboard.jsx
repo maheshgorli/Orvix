@@ -24,7 +24,6 @@ export default function Dashboard() {
   // ── Data fetchers ────────────────────────────────────────────────────────
 
   const fetchEvents = useCallback(async () => {
-    setEventsLoading(true);
     try {
       const [wfRes, stRes] = await Promise.all([
         api.get("/wildfires"),
@@ -50,9 +49,38 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchEvents();
-    fetchImageCount();
-  }, [fetchEvents, fetchImageCount]);
+    let ignore = false;
+    async function load() {
+      try {
+        const [wfRes, stRes] = await Promise.all([
+          api.get("/wildfires"),
+          api.get("/storms"),
+        ]);
+        if (!ignore) {
+          setWildfires(wfRes.data);
+          setStorms(stRes.data);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("Failed to fetch events:", err);
+          setToast({ message: "Failed to load event data from NASA.", type: "error" });
+        }
+      } finally {
+        if (!ignore) setEventsLoading(false);
+      }
+
+      try {
+        const res = await api.get("/gallery");
+        if (!ignore) setImageCount(res.data.length);
+      } catch {
+        // non-critical
+      }
+    }
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // ── Start Monitoring handler ─────────────────────────────────────────────
 

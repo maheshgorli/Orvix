@@ -11,7 +11,6 @@ export default function Gallery() {
   const [toast, setToast]     = useState({ message: "", type: "info" });
 
   const fetchGallery = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await api.get("/gallery");
       setImages(res.data);
@@ -24,8 +23,25 @@ export default function Gallery() {
   }, []);
 
   useEffect(() => {
-    fetchGallery();
-  }, [fetchGallery]);
+    let ignore = false;
+    async function load() {
+      try {
+        const res = await api.get("/gallery");
+        if (!ignore) setImages(res.data);
+      } catch (err) {
+        if (!ignore) {
+          console.error("Gallery fetch error:", err);
+          setToast({ message: "Failed to load gallery from backend.", type: "error" });
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   return (
     <main className={styles.page}>

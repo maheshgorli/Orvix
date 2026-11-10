@@ -1,0 +1,323 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.pageSub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.errorBanner {
+  margin-bottom: 8px;
+}
+
+/* Metrics Grid */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.metricCard {
+  padding: 16px 20px;
+}
+
+.metricLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.metricValue {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.valOrange {
+  color: var(--accent-orange);
+}
+
+.valRed {
+  color: var(--accent-red);
+}
+
+.valCyan {
+  color: var(--accent-cyan);
+}
+
+.metricFooter {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Two Column Layout */
+.twoColumnGrid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1080px) {
+  .twoColumnGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.leftCol, .rightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cardHeaderFlex {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-subtle);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.tabBtn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.tabBtn:hover {
+  color: var(--text-main);
+}
+
+.tabActive {
+  background: var(--surface-hover);
+  color: var(--accent-cyan);
+  box-shadow: var(--shadow-sm);
+}
+
+.loadingWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Events List */
+.eventsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.eventRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.eventRow:hover {
+  border-color: var(--border);
+}
+
+.eventMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.eventTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eventId {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.eventDate {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.eventTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eventCoordinates {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sourceBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.sourceBtn:hover {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.linkIcon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Latest Image Tile */
+.imageTile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.imagePreviewWrap {
+  width: 100%;
+  height: 180px;
+  background: #000;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+}
+
+.imagePreview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imageMetaTable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-subtle);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.metaKey {
+  color: var(--text-dim);
+}
+
+.metaVal {
+  color: var(--text-muted);
+}
+
+.metaValMono {
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* Pipeline Status Card */
+.pipelineTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pipelineList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stageItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.stageName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.stageDesc {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
