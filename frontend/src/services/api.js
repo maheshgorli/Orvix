@@ -111,4 +111,19 @@ export function postCaptureImage(body) {
   return apiPost("/api/image", body);
 }
 
+/** Permanently delete a stored satellite image by filename */
+export function deleteImage(filename) {
+  return apiDelete(`/api/image/${encodeURIComponent(filename)}`);
+}
+
+/** Fetch historical image downloads with optional type filter */
+export function getHistory(params = {}) {
+  return apiGet("/api/history", params);
+}
+
+/** Batch trigger NASA disaster monitoring and Sentinel-2 acquisition */
+export function getMonitor(params = {}) {
+  return apiGet("/api/monitor", params);
+}
+
 export default client;
