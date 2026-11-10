@@ -1,78 +1,45 @@
-# Tech Debt & PRD Gap Tracker
+# ORVIX — Tech Debt & Implementation Status Tracker
 
-Tracks the delta between the PRD ("Project P – Automated Geo Satellite Platform")
-and the current implementation. Update this file as items are resolved.
-
----
-
-## 1. Declared but unused dependencies
-
-The following packages appear in `Requirements.txt` but are not imported or
-referenced anywhere in `backend/app/`:
-
-| Package | PRD section requiring it | Status |
-|---|---|---|
-| `tensorflow` | §7 AI-Based Disaster Detection | Unused |
-| `opencv-python` | §7 AI-Based Disaster Detection (image processing) | Unused |
-| `pillow` | §7 AI-Based Disaster Detection (image I/O) | Unused |
-| `scikit-learn` | §7 AI-Based Disaster Detection (classical ML fallback) | Unused |
-| `motor` | §11 Technology Stack – async MongoDB driver | Unused |
-| `pymongo` | §11 Technology Stack – MongoDB | Unused |
-
-Installing these without using them increases environment setup time and attack
-surface. They should stay in `Requirements.txt` as intent markers but be moved
-to a clearly labelled `# --- future / not yet wired ---` section until the
-relevant milestone is reached.
+This document tracks the implementation status of ORVIX (Earth Intelligence Systems), reconciling the original PRD specifications with the active codebase.
 
 ---
 
-## 2. Missing PRD features
+## 1. Feature Status Matrix
 
-### AI / CV disaster detection (PRD §7)
-- No model training, inference, or image-pipeline code exists yet.
-- Current implementation is a pure pass-through of raw NASA EONET event data
-  (`backend/app/routers/satellite.py` → `_fetch_events_by_category()`).
-- No satellite imagery is fetched, preprocessed, or classified.
-
-### MongoDB persistence layer (PRD FR-06 – "maintain historical records")
-- No database connection, schema, or write path exists.
-- Every request to `/wildfires` and `/storms` re-fetches live data from EONET
-  with no caching, deduplication, or history stored.
-- `motor` / `pymongo` are declared in `Requirements.txt` but never instantiated.
-
-### Alert-threshold and risk-level logic (PRD FR-05)
-- No risk score, severity tier, or threshold comparison is computed anywhere in
-  `backend/app/`.
-- Events are returned as raw EONET records with no prioritisation or alerting.
-
-### Leaflet.js map (PRD – "High" priority frontend feature)
-- `leaflet` is absent from `frontend/package.json`; no map component exists in
-  `frontend/src/`.
-- Current UI (`frontend/src/App.jsx`) renders events as plain card lists only.
+| Component / Requirement | Status | Implementation Details |
+| :--- | :--- | :--- |
+| **NASA EONET Telemetry** | **Completed & Tested** | Concurrent async ingestion (`httpx` + `asyncio.gather`) for active wildfires and severe storms via `/api/disasters`. |
+| **Copernicus CDSE OAuth & Tasking** | **Completed & Tested** | Token refresh cache against Copernicus Data Space Ecosystem (`identity.dataspace.copernicus.eu`), payload builder, and Sentinel-2 L2A true-colour acquisition via `/api/image`. |
+| **Local Disk Imagery Archive** | **Completed & Tested** | File persistence to `backend/images/` with deterministic naming (`{type}_{date}_{time}_lat{lat}_lon{lon}.png`), static mount at `/images/`, and deletion via `/api/image/{id}`. |
+| **Persistence Layer (MongoDB)** | **Completed & Tested** | Motor/pymongo layer in `db_service.py` for disaster events (deduplicated by `event_id`), image metadata, acquisition logs, and monitoring sessions. Graceful fallback to memory/disk when `MONGODB_URI` is unconfigured. |
+| **API Envelope & Single Source of Truth** | **Completed & Tested** | All primary operations consolidated under `/api/*` returning uniform `{ success, message, data, error }`. Legacy prototype routes kept as deprecated thin wrappers. |
+| **Interactive Leaflet Mapping** | **Completed & Tested** | React-Leaflet integration in `LiveMonitoring.jsx` using CartoDB Dark Matter tiles and custom HTML/SVG vector markers for wildfires and storms (zero emojis). |
+| **Mission Control Design System** | **Completed & Tested** | Dark navy/charcoal tokens (`#090c10`), cyan/teal accents, responsive collapsible sidebar with live UTC clock, and reusable UI kit (`Card`, `Button`, `Badge`, `Spinner`, `EmptyState`, `ErrorState`). |
+| **Satellite Explorer & Tasking** | **Completed & Tested** | Parameterized form for latitude, longitude, date range, resolution, and bounding box with active incident presets. |
+| **Archive Gallery** | **Completed & Tested** | Full gallery with real metadata, image previews, direct downloads, search/filtering, and deletion. **No fake AI scores.** |
+| **Spectral & ML Analysis Pipeline Skeleton** | **Implemented (Typed Interfaces)** | Typed contracts in `backend/app/services/analysis/` (`validator`, `preprocessor`, `spectral`, `model`). Execution stages honestly raise `NotImplementedError` and report `pending` via `/api/analysis/status`. |
+| **Live Spectral Computations (NDVI/NBR)** | **Pending Milestone** | Requires upgrading ingestion pipeline to multi-band 13-band Sentinel-2 granules (currently fetching 3-band true-colour PNGs). |
+| **Trained ML Detection & Segmentation** | **Pending Milestone** | Requires trained model weights (U-Net/ResNet) and inference runtime. No synthetic scores are returned. |
 
 ---
 
-## 3. Recommended next milestones
+## 2. Reconciled Dependencies
 
-Work items ordered from lowest to highest complexity/risk:
+In earlier drafts of this document, dependencies were labeled as unused. The current reality:
 
-- **(a) Leaflet map in frontend** — add `leaflet` + `react-leaflet` to
-  `frontend/package.json`; replace the card lists in `frontend/src/App.jsx`
-  with a map that plots wildfire and storm coordinates. No backend changes
-  needed; unblocks the core visual deliverable.
+- **`pillow` (PIL)**: **Actively used** in `backend/app/services/image_service.py` for image decoding, array serialization, and PNG persistence.
+- **`motor` / `pymongo`**: **Actively wired** in `backend/app/services/db_service.py` for MongoDB connection pooling and async persistence.
+- **`httpx`**: **Actively used** for concurrent HTTP requests to NASA EONET and Copernicus Data Space.
+- **`numpy`**: **Actively used** for image array manipulation and spectral buffer typing.
+- **`tensorflow` / `opencv-python` / `scikit-learn`**: Reserved for the upcoming model training and segmentation milestone. They are kept as intent markers and isolated from runtime imports so core platform operations remain lightweight.
 
-- **(b) MongoDB event history** — add a `backend/app/services/db_service.py`
-  using `motor` for async writes; wire `/wildfires` and `/storms` to persist
-  each fetched event with a timestamp before returning. Satisfies FR-06 and
-  enables deduplication.
+---
 
-- **(c) Risk-scoring function** — add a lightweight scoring function in
-  `backend/app/services/` that assigns a severity tier based on event age,
-  coordinate proximity, and category before any ML is introduced. Satisfies
-  FR-05 without heavyweight dependencies.
+## 3. Remaining Work & Future Milestones
 
-- **(d) TensorFlow / OpenCV image detection** — only after (a)–(c) are stable.
-  This is the highest-complexity, highest-risk item: requires a training
-  dataset, model artefact storage, and a separate inference pipeline. Introduce
-  it in an isolated `backend/app/services/detection_service.py` so the rest of
-  the app stays unaffected during development.
+1. **Multispectral Granule Ingestion**:
+   - Extend `sentinel_service.py` to optionally request multi-band GeoTIFF outputs (specifically B04, B08, and B12) to compute mathematical NDVI `(B08 - B04)/(B08 + B04)` and NBR `(B08 - B12)/(B08 + B12)`.
+2. **Model Weight Integration**:
+   - Train and bundle an inference model (e.g. lightweight ONNX or PyTorch model) inside `backend/app/services/analysis/model.py` to replace the `NotImplementedError` skeleton with true damage segmentation masks.
+3. **Automated Cron Scheduling**:
+   - Introduce Celery or FastAPI background worker crons for recurring 6-hour planetary scans.
