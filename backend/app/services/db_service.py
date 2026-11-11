@@ -363,6 +363,18 @@ class _DatabaseService:
             logger.warning("Failed to persist alert for event '%s': %s", event_id, exc)
             return False
 
+    async def insert_alert(self, alert_dict: dict[str, Any]) -> bool:
+        """Store an alert dictionary in the database."""
+        db = self.get_database()
+        if db is None:
+            return False
+        try:
+            await db.alerts.insert_one(alert_dict)
+            return True
+        except PyMongoError as exc:
+            logger.warning("Failed to insert alert: %s", exc)
+            return False
+
     # ── 6. Detection Results (Future AI/CV) ────────────────────────────────────
 
     async def save_detection_result(self, result_dict: dict[str, Any]) -> bool:

@@ -189,3 +189,51 @@ class MonitorData(BaseModel):
 class DeleteData(BaseModel):
     filename: str
     deleted:  bool
+
+
+# ── Spectral Analysis & Computer Vision ────────────────────────────────────────
+
+class SpectralRequest(BaseModel):
+    filename:   str = Field(description="Target image filename in backend/images/")
+    index_type: str = Field(default="ndvi", description="One of 'ndvi', 'nbr', 'ndwi', 'vari'")
+
+
+class DetectionRequest(BaseModel):
+    filename:       str   = Field(description="Target image filename in backend/images/")
+    detection_type: str   = Field(default="wildfire", description="wildfire | flood | anomaly | dnn_unet")
+    sensitivity:    float = Field(default=0.5, ge=0.1, le=1.0, description="Detection sensitivity 0.1 to 1.0")
+
+
+# ── Risk Assessment ───────────────────────────────────────────────────────────
+
+class RiskRequest(BaseModel):
+    latitude:  float = Field(ge=-90, le=90, description="Target latitude")
+    longitude: float = Field(ge=-180, le=180, description="Target longitude")
+    radius_km: float = Field(default=500.0, ge=10, le=5000, description="Analysis radius in km")
+
+
+# ── Alerts ────────────────────────────────────────────────────────────────────
+
+class AlertCreateRequest(BaseModel):
+    title:           str
+    category:        str
+    severity:        str = Field(default="HIGH", description="CRITICAL | HIGH | MEDIUM | INFO")
+    latitude:        Optional[float] = None
+    longitude:       Optional[float] = None
+    description:     str = ""
+    source_event_id: Optional[str] = None
+
+
+class AlertStatusUpdateRequest(BaseModel):
+    status: str = Field(description="active | acknowledged | resolved")
+
+
+# ── Monitoring Jobs ───────────────────────────────────────────────────────────
+
+class MonitoringJobCreateRequest(BaseModel):
+    target_name: str = Field(default="Planetary Hazard Sweep")
+    latitude:    Optional[float] = None
+    longitude:   Optional[float] = None
+    days:        int = Field(default=30, ge=1, le=90)
+    max_images:  int = Field(default=3, ge=1, le=20)
+

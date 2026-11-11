@@ -61,10 +61,9 @@ _CDSE_BASE_URL  = settings.SENTINEL_BASE_URL
 _CDSE_TOKEN_URL = settings.SENTINEL_TOKEN_URL
 
 # Re-define the collection with the correct CDSE service_url.
-# DataCollection.SENTINEL2_L1C hard-codes services.sentinel-hub.com, which
-# rejects CDSE credentials.
-_SENTINEL2_L1C_CDSE = DataCollection.SENTINEL2_L1C.define_from(
-    "SENTINEL2_L1C_CDSE",
+# Sentinel-2 Level-2A (surface reflectance) on Copernicus Data Space Ecosystem.
+_SENTINEL2_L2A_CDSE = DataCollection.SENTINEL2_L2A.define_from(
+    "SENTINEL2_L2A_CDSE",
     service_url=_CDSE_BASE_URL,
 )
 
@@ -103,7 +102,7 @@ class SentinelImageMeta:
     bbox:              list[float]   # [lon_min, lat_min, lon_max, lat_max]
     resolution_meters: int
     image_size_pixels: dict          # {"width": W, "height": H}
-    data_collection:   str = "SENTINEL2_L1C"
+    data_collection:   str = "SENTINEL2_L2A"
     mosaicking_order:  str = "leastCC"
 
 
@@ -219,7 +218,7 @@ class _SentinelService:
                 evalscript=_EVALSCRIPT_TRUE_COLOR,
                 input_data=[
                     SentinelHubRequest.input_data(
-                        data_collection=_SENTINEL2_L1C_CDSE,
+                        data_collection=_SENTINEL2_L2A_CDSE,
                         time_interval=(date_from, date_to),
                         mosaicking_order=MosaickingOrder(mosaicking_order),
                     )

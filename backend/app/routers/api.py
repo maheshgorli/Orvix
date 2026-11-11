@@ -38,6 +38,12 @@ from app.schemas import (
     ServiceStatus,
     StatusData,
     TokenData,
+    SpectralRequest,
+    DetectionRequest,
+    RiskRequest,
+    AlertCreateRequest,
+    AlertStatusUpdateRequest,
+    MonitoringJobCreateRequest,
 )
 from app.services.image_service import image_service
 from app.services.nasa_service import nasa_service, NasaServiceError
@@ -49,6 +55,11 @@ from app.services.sentinel_service import (
 from app.services.token_service import token_service
 from app.services.db_service import db_service
 from app.services.analysis import analysis_pipeline
+from app.services.processing_service import processing_service
+from app.services.detection_service import detection_service
+from app.services.risk_service import risk_service
+from app.services.alert_service import alert_service
+from app.services.monitoring_service import monitoring_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["API"])
@@ -316,19 +327,19 @@ async def get_disasters(
     ),
     category: str = Query(
         default=None,
-        description="Filter by EONET category id, e.g. 'wildfires', 'severeStorms'. "
+        description="Filter by EONET category id, e.g. 'wildfires', 'severeStorms', 'floods'. "
                     "Omit to return all active disaster types.",
+    ),
+    status: str = Query(
+        default="open",
+        description="Filter by event status: 'open' (active), 'closed' (historical), or 'all'.",
     ),
 ) -> ApiResponse[DisastersData]:
     try:
         if category:
-            events = await nasa_service.fetch_events_async(category_id=category, days=days)
+            events = await nasa_service.fetch_events_async(category_id=category, days=days, status=status)
         else:
-            wildfires, storms = await asyncio.gather(
-                nasa_service.fetch_wildfires_async(days=days),
-                nasa_service.fetch_storms_async(days=days),
-            )
-            events = wildfires + storms
+            events = await nasa_service.fetch_events_async(days=days, status=status)
     except NasaServiceError as exc:
         logger.error("GET /api/disasters failed: %s", exc)
         return ApiResponse.fail(
@@ -359,6 +370,7 @@ async def get_disasters(
     try:
         raw_events = [e.to_dict() for e in events]
         await db_service.bulk_upsert_disaster_events(raw_events)
+        asyncio.create_task(alert_service.generate_alerts_from_events(raw_events))
     except Exception as exc:
         logger.warning("Database bulk upsert error for disaster events: %s", exc)
 
@@ -571,3 +583,237 @@ def delete_image(
         data=DeleteData(filename=image_id, deleted=True),
         message=f"Image '{image_id}' deleted successfully.",
     )
+
+
+# ── POST /api/processing/spectral ─────────────────────────────────────────────
+
+@router.post(
+    "/processing/spectral",
+    summary="Compute spectral indices on satellite imagery",
+    description="Calculates NDVI, NBR, NDWI, or VARI optical proxies and generates colorized heatmaps.",
+)
+def compute_spectral_index(body: SpectralRequest) -> ApiResponse[dict]:
+    try:
+        result = processing_service.compute_spectral_index(
+            image_path_or_array=body.filename,
+            index_type=body.index_type,
+            source_filename=body.filename,
+        )
+        return ApiResponse.ok(
+            data={
+                "source_filename": result.source_filename,
+                "processed_filename": result.processed_filename,
+                "processed_image_url": result.processed_image_url,
+                "processed_image_path": result.processed_image_path,
+                "metrics": {
+                    "index_name": result.metrics.index_name,
+                    "is_multispectral": result.metrics.is_multispectral,
+                    "formula": result.metrics.formula,
+                    "mean_value": result.metrics.mean_value,
+                    "min_value": result.metrics.min_value,
+                    "max_value": result.metrics.max_value,
+                    "std_dev": result.metrics.std_dev,
+                    "coverage_percentage": result.metrics.coverage_percentage,
+                    "histogram_bins": result.metrics.histogram_bins,
+                    "histogram_counts": result.metrics.histogram_counts,
+                    "notes": result.metrics.notes,
+                },
+                "created_at": result.created_at,
+            },
+            message=f"Successfully generated {body.index_type.upper()} spectral index map.",
+        )
+    except FileNotFoundError as exc:
+        return ApiResponse.fail(error=str(exc), message="Source image not found.")
+    except Exception as exc:
+        logger.error("Spectral processing failed: %s", exc)
+        return ApiResponse.fail(error=str(exc), message="Failed to compute spectral index.")
+
+
+# ── POST /api/analysis/detect ─────────────────────────────────────────────────
+
+@router.post(
+    "/analysis/detect",
+    summary="Run AI & Computer Vision hazard detection",
+    description="Detects wildfire hotspots, smoke plumes, flood inundation, or spatial anomalies.",
+)
+def run_hazard_detection(body: DetectionRequest) -> ApiResponse[dict]:
+    try:
+        result = detection_service.run_detection(
+            image_path_or_filename=body.filename,
+            detection_type=body.detection_type,
+            sensitivity=body.sensitivity,
+        )
+        return ApiResponse.ok(
+            data={
+                "source_filename": result.source_filename,
+                "overlay_filename": result.overlay_filename,
+                "overlay_image_url": result.overlay_image_url,
+                "overlay_image_path": result.overlay_image_path,
+                "model_name": result.model_name,
+                "model_version": result.model_version,
+                "total_detections": result.total_detections,
+                "detections": [
+                    {
+                        "label": d.label,
+                        "confidence": d.confidence,
+                        "bbox": d.bbox,
+                        "area_pixels": d.area_pixels,
+                        "estimated_hectares": d.estimated_hectares,
+                        "intensity": d.intensity,
+                    }
+                    for d in result.detections
+                ],
+                "summary_message": result.summary_message,
+                "created_at": result.created_at,
+            },
+            message=result.summary_message,
+        )
+    except FileNotFoundError as exc:
+        return ApiResponse.fail(error=str(exc), message="Source image not found.")
+    except Exception as exc:
+        logger.error("Hazard detection failed: %s", exc)
+        return ApiResponse.fail(error=str(exc), message="Hazard detection analysis failed.")
+
+
+# ── POST /api/risk/assess ─────────────────────────────────────────────────────
+
+@router.post(
+    "/risk/assess",
+    summary="Evaluate geospatial multi-hazard risk",
+    description="Calculates composite risk score (0-100), hazard proximity, and operational precautions.",
+)
+async def assess_geospatial_risk(body: RiskRequest) -> ApiResponse[dict]:
+    try:
+        result = await risk_service.evaluate_risk(
+            latitude=body.latitude,
+            longitude=body.longitude,
+            radius_km=body.radius_km,
+        )
+        return ApiResponse.ok(
+            data={
+                "latitude": result.latitude,
+                "longitude": result.longitude,
+                "radius_km": result.radius_km,
+                "risk_score": result.risk_score,
+                "risk_level": result.risk_level,
+                "primary_threat": result.primary_threat,
+                "nearby_hazards_count": result.nearby_hazards_count,
+                "nearest_hazards": [
+                    {
+                        "event_id": h.event_id,
+                        "title": h.title,
+                        "category": h.category,
+                        "distance_km": h.distance_km,
+                        "bearing": h.bearing,
+                        "latitude": h.latitude,
+                        "longitude": h.longitude,
+                        "detection_date": h.detection_date,
+                    }
+                    for h in result.nearest_hazards
+                ],
+                "factors": {
+                    "proximity_factor": result.factors.proximity_factor,
+                    "density_factor": result.factors.density_factor,
+                    "seasonality_factor": result.factors.seasonality_factor,
+                    "moisture_aridity_factor": result.factors.moisture_aridity_factor,
+                },
+                "recommendations": result.recommendations,
+                "model_version": result.model_version,
+                "evaluated_at": result.evaluated_at,
+            },
+            message=f"Risk evaluated: {result.risk_level} ({result.risk_score}/100) — {result.primary_threat}",
+        )
+    except Exception as exc:
+        logger.error("Risk assessment failed: %s", exc)
+        return ApiResponse.fail(error=str(exc), message="Geospatial risk assessment failed.")
+
+
+# ── Alerts Management ─────────────────────────────────────────────────────────
+
+@router.get(
+    "/alerts",
+    summary="List system hazard alerts",
+    description="Returns active, acknowledged, or resolved alerts.",
+)
+def get_alerts(
+    status: Optional[str] = Query(default=None, description="active | acknowledged | resolved | all"),
+    severity: Optional[str] = Query(default=None, description="CRITICAL | HIGH | MEDIUM | INFO | all"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> ApiResponse[list[dict]]:
+    alerts = alert_service.list_alerts(status=status, severity=severity, limit=limit)
+    return ApiResponse.ok(
+        data=[a.to_dict() for a in alerts],
+        message=f"{len(alerts)} alert(s) retrieved.",
+    )
+
+
+@router.post(
+    "/alerts",
+    summary="Create a custom hazard alert",
+)
+async def create_alert(body: AlertCreateRequest) -> ApiResponse[dict]:
+    alert = await alert_service.create_alert(
+        title=body.title,
+        category=body.category,
+        severity=body.severity,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        description=body.description,
+        source_event_id=body.source_event_id,
+    )
+    return ApiResponse.ok(data=alert.to_dict(), message="Alert created successfully.")
+
+
+@router.post(
+    "/alerts/{alert_id}/status",
+    summary="Update alert status",
+)
+def update_alert_status(alert_id: str, body: AlertStatusUpdateRequest) -> ApiResponse[dict]:
+    updated = alert_service.update_alert_status(alert_id=alert_id, new_status=body.status)
+    if not updated:
+        return ApiResponse.fail(error=f"Alert '{alert_id}' not found.", message="Alert update failed.")
+    return ApiResponse.ok(data=updated.to_dict(), message=f"Alert status updated to {body.status}.")
+
+
+@router.get(
+    "/alerts/rules",
+    summary="Get alert threshold configuration",
+)
+def get_alert_rules() -> ApiResponse[dict]:
+    return ApiResponse.ok(data=alert_service.get_rules().to_dict(), message="Alert rules retrieved.")
+
+
+@router.post(
+    "/alerts/rules",
+    summary="Update alert threshold configuration",
+)
+def update_alert_rules(body: dict) -> ApiResponse[dict]:
+    updated = alert_service.update_rules(body)
+    return ApiResponse.ok(data=updated.to_dict(), message="Alert threshold rules updated.")
+
+
+# ── Monitoring Jobs ───────────────────────────────────────────────────────────
+
+@router.get(
+    "/monitoring/jobs",
+    summary="List background monitoring sweeps",
+)
+def list_monitoring_jobs(limit: int = Query(default=30, ge=1, le=100)) -> ApiResponse[list[dict]]:
+    jobs = monitoring_service.list_jobs(limit=limit)
+    return ApiResponse.ok(data=[j.to_dict() for j in jobs], message=f"{len(jobs)} job(s) found.")
+
+
+@router.post(
+    "/monitoring/jobs",
+    summary="Launch background monitoring job",
+)
+async def create_monitoring_job(body: MonitoringJobCreateRequest) -> ApiResponse[dict]:
+    job = monitoring_service.create_job(
+        target_name=body.target_name,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        days=body.days,
+        max_images=body.max_images,
+    )
+    return ApiResponse.ok(data=job.to_dict(), message=f"Monitoring job {job.job_id} launched in background.")
+
