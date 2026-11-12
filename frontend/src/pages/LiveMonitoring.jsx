@@ -134,7 +134,7 @@ export function LiveMonitoring() {
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Live Geospatial Monitoring</h1>
           <p className={styles.subtitle}>
-            Real-time planetary disaster tracking with synchronized NASA EONET telemetry and Copernicus satellite tasking.
+            Real-time planetary disaster tracking with synchronized NASA EONET telemetry and Earth Search satellite tasking.
           </p>
         </div>
 
@@ -189,7 +189,7 @@ export function LiveMonitoring() {
         <div className={styles.progressBanner}>
           <div className={styles.progressInfo}>
             <Spinner size="sm" />
-            <span>Connecting to Sentinel Hub CDSE API &amp; downloading multispectral imagery…</span>
+            <span>Connecting to Earth Search STAC catalogue &amp; downloading satellite imagery…</span>
           </div>
           <Badge variant="cyan">In Progress</Badge>
         </div>

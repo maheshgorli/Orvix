@@ -64,8 +64,8 @@ export function DisasterIntelligence() {
         const q = search.toLowerCase();
         const title = (e.title || "").toLowerCase();
         const id = (e.event_id || "").toLowerCase();
-        const coords = (e.coordinates || "").toLowerCase();
-        return title.includes(q) || id.includes(q) || coords.includes(q);
+        const coords = Array.isArray(e.coordinates) ? e.coordinates.join(", ") : String(e.coordinates || "");
+        return title.includes(q) || id.includes(q) || coords.toLowerCase().includes(q);
       }
       return true;
     });

@@ -2,7 +2,7 @@
 
 > **Understand Earth. Predict Tomorrow.**
 
-ORVIX is an automated Earth Intelligence platform that correlates NASA EONET natural disaster telemetry with European Space Agency (ESA) Copernicus Data Space Ecosystem (CDSE) Sentinel-2 optical imagery. It provides real-time geospatial hazard tracking, on-demand satellite tasking, and a persistent local imagery archive.
+ORVIX is an automated Earth Intelligence and geospatial monitoring platform that correlates real-time natural disaster telemetry from NASA EONET with open Earth observation satellite data (Sentinel-2 L2A & Landsat) via Earth Search STAC. It provides planetary hazard tracking, satellite scene discovery, multispectral raster processing (True Color, False Color, NDVI, NDWI, NBR), and a persistent local imagery archive.
 
 ---
 
@@ -12,19 +12,21 @@ ORVIX is an automated Earth Intelligence platform that correlates NASA EONET nat
 flowchart LR
     subgraph Data Sources
         NASA[NASA EONET v3 API]
-        CDSE[Copernicus Data Space Ecosystem]
+        STAC[Earth Search STAC / AWS Open Data]
     end
 
     subgraph Backend [FastAPI Backend :8000]
         API[/api/* Unified Router]
+        ES[EarthSearchService]
         NS[NasaService]
-        SS[SentinelService & TokenService]
         IS[ImageService]
-        DB[(MongoDB / Fallback)]
+        PS[ProcessingService]
+        DB[(MongoDB / Local JSON Store)]
         FS[(Disk: backend/images/)]
     end
 
-    subgraph Frontend [React 19 + Leaflet :5173]
+    subgraph Frontend [React + Leaflet :5173]
+        OV[Overview Dashboard]
         LM[Live Geospatial Map]
         SE[Satellite Explorer]
         IG[Image Gallery]
@@ -34,9 +36,10 @@ flowchart LR
     end
 
     NASA -->|Async concurrent events| NS
-    CDSE -->|OAuth2 & Process API L2A| SS
+    STAC -->|Public COGs over HTTPS| ES
     NS --> API
-    SS --> IS
+    ES --> PS
+    PS --> IS
     IS --> FS
     IS --> DB
     API --> Frontend
@@ -47,36 +50,35 @@ flowchart LR
 ## 2. Core Capabilities
 
 1. **Live Geospatial Monitoring**: Interactive map powered by React-Leaflet and CartoDB Dark Matter tiles plotting active wildfires and severe storms using distinctive custom vector markers (no emojis).
-2. **Sentinel-2 Satellite Tasking**: Parameterized coordinate acquisition (`lat`, `lon`, date range, spatial resolution) via the Copernicus Data Space Ecosystem.
-3. **Local Satellite Archive**: High-resolution imagery stored deterministically on disk (`backend/images/`) with instant previews, file downloads, search/filtering, and permanent deletion. **No fake AI scores.**
-4. **Disaster Intelligence Directory**: Comprehensive EONET disaster registry with category filtering, search, direct NASA dossier references, and JSON export.
-5. **System Health & Subsystem Diagnostics**: Real-time status reporting for NASA EONET, Copernicus OAuth token lifecycle, and MongoDB database connectivity without exposing secret credentials.
-6. **Planetary Analytics**: Spatial hemispheric distribution (North/South, East/West), temporal recency metrics (7/14/30 days), and transparent labeling of uncomputed analytical indices as `not available`.
+2. **Provider-Independent Satellite Tasking**: Parameterized coordinate acquisition (`lat`, `lon`, date range, max cloud cover %) via Earth Search STAC accessing public Cloud-Optimized GeoTIFFs (COGs) on AWS Open Data without broken OAuth dependencies.
+3. **Multispectral Image Processing Engine**:
+   - **True Color (RGB)**: Sentinel-2 B04 (Red), B03 (Green), B02 (Blue) with 2%-98% percentile contrast stretch.
+   - **False Color Infrared**: B08 (NIR), B04 (Red), B03 (Green) for burn scar and vegetation delineation.
+   - **NDVI (Normalized Difference Vegetation Index)**: $(NIR - Red) / (NIR + Red)$ with RdYlGn colormap.
+   - **NDWI (Normalized Difference Water Index)**: $(Green - NIR) / (Green + NIR)$ with Blues colormap.
+   - **NBR (Normalized Burn Ratio)**: $(NIR - SWIR2) / (NIR + SWIR2)$ with thermal colormap.
+4. **Local Satellite Archive & Gallery**: Acquired imagery stored deterministically on disk (`backend/images/satellite/`, `thumbnails/`, `processed/`) with instant previews, binary file downloads, search/filtering, and safe permanent deletion.
+5. **Disaster Intelligence Directory**: Comprehensive NASA EONET disaster registry with category filtering, search, direct NASA dossier references, and JSON export.
+6. **System Health & Subsystem Diagnostics**: Real-time status reporting for NASA EONET, Earth Search STAC, MongoDB database, Local Storage Engine, and Processing Engine without exposing secrets.
+7. **Planetary Analytics**: Spatial hemispheric distribution (North/South, East/West), temporal recency metrics (7/14/30 days), and transparent labeling of uncomputed analytical indices.
 
 ---
 
 ## 3. Quick Start (Windows)
 
-### Option A: Using the Windows Batch Launcher
-```bat
-start_backend.bat
-```
-
-### Option B: Running from Terminal
-
-#### 1. Backend (Terminal 1)
+### 1. Start Backend (Terminal 1)
 ```powershell
-uv run --directory backend uvicorn app.main:app --port 8000 --reload
+uv run uvicorn backend.app.main:app --port 8000 --reload
 ```
-*API Documentation:* Open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) in your browser.
+*API Documentation & Swagger UI:* [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-#### 2. Frontend (Terminal 2)
+### 2. Start Frontend (Terminal 2)
 ```powershell
 cd frontend
 npm install
 npm run dev
 ```
-*Mission Control:* Open [http://127.0.0.1:5173](http://127.0.0.1:5173) in your browser.
+*Mission Control Web App:* [http://localhost:5173](http://localhost:5173)
 
 ---
 
@@ -89,24 +91,25 @@ copy .env.example backend\.env
 
 | Key | Purpose | Default |
 | :--- | :--- | :--- |
-| `NASA_API_KEY` | NASA Open API key | `DEMO_KEY` |
-| `SENTINEL_CLIENT_ID` | Copernicus CDSE OAuth client ID | Required for satellite tasking |
-| `SENTINEL_CLIENT_SECRET`| Copernicus CDSE OAuth client secret | Required for satellite tasking |
+| `NASA_API_KEY` | NASA Open API key | `DEMO_KEY` (Free at https://api.nasa.gov/) |
 | `MONGODB_URI` | MongoDB Connection URI (Optional) | `mongodb://localhost:27017` |
 | `MONGODB_DB_NAME` | Database collection name | `orvix` |
 
+> [!NOTE]
+> Satellite data acquisition via Earth Search STAC is 100% free and public; no API key or OAuth credentials are required. If `MONGODB_URI` is unconfigured, ORVIX continues running with zero downtime using local JSON persistence (`backend/data/acquisitions.json`).
+
 ---
 
-## 5. Verification & Testing
+## 5. Automated Verification & Testing
 
-- **Backend Validation:**
-  ```powershell
-  uv run --directory backend python -m compileall app
-  ```
-- **Frontend Validation:**
-  ```powershell
-  cd frontend
-  npm run lint
-  npm run build
-  ```
+Run the full end-to-end integration test suite:
+```powershell
+uv run python scripts/test_full_platform.py
+```
 
+Run frontend linting and build checks:
+```powershell
+cd frontend
+npm run lint
+npm run build
+```

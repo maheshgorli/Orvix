@@ -1,6 +1,6 @@
 # ORVIX — Frontend Application
 
-The ORVIX frontend is a mission-control web interface built with React 19, Vite, and React-Leaflet. It provides real-time geospatial disaster tracking, interactive satellite tasking, and local image archive management.
+The ORVIX frontend is a mission-control web interface built with React, Vite, and React-Leaflet. It provides real-time geospatial disaster tracking, interactive Earth observation satellite tasking (Sentinel-2 L2A & Landsat), multispectral composite inspection, and local image archive management.
 
 ---
 
@@ -47,32 +47,17 @@ npm run preview -- --port 5173
 
 ---
 
-## 3. Component Architecture
+## 3. Pages & Features
 
-```text
-frontend/src/
-├── index.css                   # Global design tokens, reset, Leaflet dark overrides
-├── main.jsx                    # Application entrypoint
-├── App.jsx                     # Router config for all 7 routes
-├── services/
-│   └── api.js                  # Central Axios client unwrapping { success, message, data, error }
-├── components/
-│   ├── layout/
-│   │   ├── AppLayout.jsx       # App shell wrapping sidebar and main viewport
-│   │   └── Sidebar.jsx         # Collapsible sidebar with brand identity and live clock
-│   └── ui/
-│       ├── Button.jsx          # Primary, secondary, outline, danger variants with spinner
-│       ├── Badge.jsx           # Cyan, amber, emerald, danger status indicators
-│       ├── Card.jsx            # Surface card layout primitives
-│       ├── Spinner.jsx         # Circular radar SVG loader
-│       ├── EmptyState.jsx      # Empty list placeholder with call-to-action
-│       └── ErrorState.jsx      # Error banner with retry trigger
-└── pages/
-    ├── Overview.jsx            # Planetary metrics, active feed, latest acquisition
-    ├── LiveMonitoring.jsx      # React-Leaflet map with custom vector markers
-    ├── SatelliteExplorer.jsx   # Interactive Sentinel-2 tasking & metadata inspector
-    ├── Gallery.jsx             # Local imagery archive with download & delete
-    ├── DisasterIntelligence.jsx# NASA EONET incident registry with JSON export
-    ├── Analytics.jsx           # Spatial/temporal analytics & pending metrics
-    └── Settings.jsx            # Subsystem health diagnostics (NASA, CDSE, MongoDB)
-```
+1. **Overview Dashboard (`Overview.jsx`)**: Active hazard totals, event distribution, recent acquisitions, latest satellite capture preview.
+2. **Live Geospatial Monitoring (`LiveMonitoring.jsx`)**: Full-screen React-Leaflet map with CartoDB Dark Matter tiles, custom vector markers for wildfires and storms, event details popup, and direct "Inspect in Explorer" tasking.
+3. **Satellite Explorer (`SatelliteExplorer.jsx`)**:
+   - **Step 1 - Search**: Discover STAC scenes via Earth Search by lat/lon, date range, collection, and max cloud cover.
+   - **Step 2 - Preview**: Instant thumbnail preview and scene asset inspection.
+   - **Step 3 - Acquire**: Download and composite selected scene.
+   - **Step 4 - Multi-Product Switcher**: Interactive tabs for True Color RGB, False Color Infrared, NDVI (Vegetation), NDWI (Water), and NBR (Burn Severity).
+   - Direct download and "View in Gallery" actions.
+4. **Image Gallery (`Gallery.jsx`)**: Grid of all saved satellite scenes, search by filename/coordinates/date, binary download streaming, and safe deletion.
+5. **Disaster Intelligence (`DisasterIntelligence.jsx`)**: Full registry of active NASA EONET events with category filtering, search, and JSON export.
+6. **Analytics (`Analytics.jsx`)**: Hemispheric distribution, temporal frequency, storage usage, and processing statistics with clear status markers.
+7. **System Health & Settings (`Settings.jsx`)**: Live diagnostics for NASA EONET, Earth Search STAC, MongoDB, Local Storage, and Processing Engine.

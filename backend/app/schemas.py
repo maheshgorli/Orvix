@@ -237,3 +237,63 @@ class MonitoringJobCreateRequest(BaseModel):
     days:        int = Field(default=30, ge=1, le=90)
     max_images:  int = Field(default=3, ge=1, le=20)
 
+
+# ── Imagery / Earth Search Schemas ───────────────────────────────────────────
+
+class SceneItem(BaseModel):
+    scene_id:        str
+    collection:      str
+    datetime:        Optional[str] = None
+    date:            Optional[str] = None
+    cloud_cover:     float = 0.0
+    bbox:            list[float] = []
+    platform:        str = "Sentinel-2"
+    thumbnail_url:   Optional[str] = None
+    visual_url:      Optional[str] = None
+    available_bands: list[str] = []
+    assets:          dict[str, str] = {}
+
+
+class SceneSearchData(BaseModel):
+    total:  int
+    scenes: list[SceneItem]
+
+
+class ImageryAcquireRequest(BaseModel):
+    scene_id:     Optional[str]   = None
+    latitude:     float           = Field(default=44.3187, ge=-90, le=90)
+    longitude:    float           = Field(default=-106.9325, ge=-180, le=180)
+    date_from:    Optional[str]   = None
+    date_to:      Optional[str]   = None
+    collection:   str             = Field(default="sentinel-2-l2a")
+    max_cloud:    float           = Field(default=100.0, ge=0.0, le=100.0)
+    output_type:  str             = Field(default="true_color")
+    resolution:   int             = Field(default=10, ge=10, le=1000)
+    event_type:   str             = Field(default="satellite")
+    bbox_size:    float           = Field(default=0.05, gt=0, le=5.0)
+
+
+class ImageryAcquisitionData(BaseModel):
+    acquisition_id:  str
+    scene_id:        str
+    collection:      str
+    platform:        str
+    datetime:        str
+    date:            str
+    latitude:        float
+    longitude:       float
+    cloud_cover:     float
+    resolution:      int
+    event_type:      str
+    image_url:       str
+    thumbnail_url:   str
+    image_path:      str
+    filename:        str
+    file_size_bytes: int
+    bbox:            list[float] = []
+    bands_available: list[str] = []
+    indices:         dict[str, str] = {}
+    status:          str = "completed"
+    created_at:      str
+
+

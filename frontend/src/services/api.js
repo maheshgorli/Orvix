@@ -121,6 +121,36 @@ export function getHistory(params = {}) {
   return apiGet("/api/history", params);
 }
 
+/** Search Earth Search STAC catalogue for scenes matching coords, dates, cloud cover */
+export function searchSatelliteScenes(params = {}) {
+  return apiGet("/api/imagery/scenes", params);
+}
+
+/** Acquire and composite a satellite scene (True Color, False Color, NDVI, NDWI, NBR) */
+export function acquireSatelliteScene(body = {}) {
+  return apiPost("/api/imagery/acquire", body);
+}
+
+/** Fetch metadata for the most recently acquired satellite scene */
+export function getLatestAcquisition() {
+  return apiGet("/api/imagery/latest");
+}
+
+/** Fetch details for a specific acquisition */
+export function getAcquisitionDetails(sceneId) {
+  return apiGet(`/api/imagery/${encodeURIComponent(sceneId)}`);
+}
+
+/** Fetch available satellite collections */
+export function getSatelliteCollections() {
+  return apiGet("/api/imagery/collections");
+}
+
+/** Download raster or PNG file URL */
+export function getDownloadUrl(filename) {
+  return `${API_BASE_URL}/api/gallery/${encodeURIComponent(filename)}/download`;
+}
+
 /** Batch trigger NASA disaster monitoring and Sentinel-2 acquisition */
 export function getMonitor(params = {}) {
   return apiGet("/api/monitor", params);

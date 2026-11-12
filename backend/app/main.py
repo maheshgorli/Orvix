@@ -22,6 +22,7 @@ from app.config import settings
 from app.routers.api import router as api_router
 from app.routers.satellite import router as satellite_router
 from app.routers.gallery import router as gallery_router
+from app.routers.imagery import router as imagery_router
 
 
 # ── Logging ──────────────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ app.mount(
 app.include_router(api_router)
 app.include_router(satellite_router)
 app.include_router(gallery_router)
+app.include_router(imagery_router)
 
 
 # ── Startup Event ────────────────────────────────────────────────────────

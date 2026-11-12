@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import styles from "./Gallery.module.css";
 import { Badge, Spinner, Button, EmptyState, ErrorState } from "../components/ui";
-import { getGallery, deleteImage, API_BASE_URL } from "../services/api";
+import { getGallery, deleteImage, getDownloadUrl, API_BASE_URL } from "../services/api";
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return "0 Bytes";
@@ -106,7 +106,7 @@ export function Gallery() {
         <div className={styles.titleArea}>
           <h1 className={styles.title}>Satellite Imagery Archive</h1>
           <p className={styles.subtitle}>
-            Verified Copernicus Sentinel-2 acquisitions preserved on local storage.
+            Verified satellite acquisitions and multispectral composites preserved on local storage.
           </p>
         </div>
 
@@ -256,7 +256,7 @@ export function Gallery() {
                       Observed: {img.date || (img.captured_at ? new Date(img.captured_at).toUTCString() : "Timestamped")}
                     </div>
                     <div style={{ color: "var(--text-dim)" }}>
-                      Source: Copernicus Sentinel-2 L2A True Colour
+                      Source: {img.data_collection ? img.data_collection.toUpperCase() : "Sentinel-2 L2A"}
                     </div>
                   </div>
                 </div>
@@ -281,7 +281,7 @@ export function Gallery() {
                       </button>
                     )}
                     <a
-                      href={imageUrl}
+                      href={getDownloadUrl(img.filename)}
                       download={img.filename}
                       className={styles.downloadLink}
                       target="_blank"

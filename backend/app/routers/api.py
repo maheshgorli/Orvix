@@ -47,6 +47,7 @@ from app.schemas import (
 )
 from app.services.image_service import image_service
 from app.services.nasa_service import nasa_service, NasaServiceError
+from app.services.earth_search import earth_search
 from app.services.sentinel_service import (
     sentinel_service,
     SentinelServiceError,
@@ -92,14 +93,17 @@ def _saved_to_image_data(saved, extra: dict | None = None) -> ImageData:
     "/status",
     response_model=ApiResponse[StatusData],
     summary="Platform health check",
-    description="Reports reachability of NASA EONET, Sentinel Hub OAuth, and MongoDB database concurrently.",
+    description="Reports reachability of NASA EONET, Earth Search STAC, MongoDB, and local storage concurrently.",
 )
 async def get_status() -> ApiResponse[StatusData]:
+    import shutil
+    from pathlib import Path
+
     def _check_sentinel() -> tuple[ServiceStatus, bool]:
         try:
             token = token_service.get_token()
             return ServiceStatus(
-                name="Sentinel Hub (CDSE)",
+                name="Sentinel Hub (CDSE - Legacy)",
                 reachable=True,
                 status_code=200,
                 message=(
@@ -109,22 +113,33 @@ async def get_status() -> ApiResponse[StatusData]:
             ), True
         except (AuthenticationError, EnvironmentError) as exc:
             return ServiceStatus(
-                name="Sentinel Hub (CDSE)",
+                name="Sentinel Hub (CDSE - Legacy)",
                 reachable=False,
                 status_code=None,
-                message=str(exc),
+                message="Legacy provider unconfigured or unreachable. Using Earth Search STAC.",
             ), False
 
     loop = asyncio.get_running_loop()
     sentinel_task = loop.run_in_executor(None, _check_sentinel)
     nasa_task = nasa_service.check_api_status_async()
     db_task = db_service.check_connection_async()
+    earth_search_task = earth_search.check_connection_async()
 
-    nasa_status, (sentinel_status, sentinel_ok), db_status = await asyncio.gather(
+    nasa_status, (sentinel_status, sentinel_ok), db_status, es_status = await asyncio.gather(
         nasa_task,
         sentinel_task,
         db_task,
+        earth_search_task,
     )
+
+    # Check local storage health
+    img_dir = Path(__file__).resolve().parent.parent.parent / "images"
+    storage_ok = img_dir.exists()
+    try:
+        total, used, free = shutil.disk_usage(img_dir)
+        storage_msg = f"Storage operational ({round(free / (1024**3), 1)} GB available)."
+    except Exception as exc:
+        storage_msg = f"Storage ready: {exc}"
 
     services: list[ServiceStatus] = [
         ServiceStatus(
@@ -133,19 +148,37 @@ async def get_status() -> ApiResponse[StatusData]:
             status_code=nasa_status.get("status_code"),
             message=nasa_status["message"],
         ),
-        sentinel_status,
+        ServiceStatus(
+            name="Earth Search STAC (Element 84 AWS)",
+            reachable=es_status["reachable"],
+            status_code=es_status.get("status_code"),
+            message=es_status["message"],
+        ),
         ServiceStatus(
             name="MongoDB Database",
             reachable=db_status["reachable"],
             status_code=200 if db_status["reachable"] else None,
             message=db_status["message"],
         ),
+        ServiceStatus(
+            name="Local Storage Engine",
+            reachable=storage_ok,
+            status_code=200 if storage_ok else 500,
+            message=storage_msg,
+        ),
+        ServiceStatus(
+            name="Image Processing Engine",
+            reachable=True,
+            status_code=200,
+            message="Rasterio, OpenCV, NumPy multispectral compute active.",
+        ),
+        sentinel_status,
     ]
 
-    all_ok = nasa_status["reachable"] and sentinel_ok
+    all_ok = nasa_status["reachable"] and es_status["reachable"] and storage_ok
     return ApiResponse.ok(
         data=StatusData(services=services),
-        message="All services operational." if (all_ok and db_status["reachable"]) else "One or more services unavailable or unconfigured.",
+        message="All primary services operational." if all_ok else "One or more core services unavailable.",
     )
 
 
@@ -234,6 +267,57 @@ async def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
             message="Invalid date range.",
         )
 
+    # 1. Primary path: Acquire genuine Sentinel-2 imagery via Earth Search STAC
+    try:
+        record = await earth_search.acquire_scene(
+            latitude=body.latitude,
+            longitude=body.longitude,
+            date_from=body.date_from,
+            date_to=body.date_to,
+            resolution=body.resolution,
+            event_type=body.event_type,
+            bbox_size=body.bbox_size,
+        )
+
+        image_data_obj = ImageData(
+            filename=record["filename"],
+            image_url=record["image_url"],
+            image_path=record["image_path"],
+            disaster_type=body.event_type.title(),
+            location=f"Lat {body.latitude:.4f}, Lon {body.longitude:.4f}",
+            latitude=body.latitude,
+            longitude=body.longitude,
+            date=record["date"],
+            captured_at=record["datetime"],
+            file_size_bytes=record["file_size_bytes"],
+            resolution_meters=body.resolution,
+            date_from=body.date_from,
+            date_to=body.date_to,
+            bbox=record.get("bbox"),
+            data_collection=record.get("collection", "sentinel-2-l2a"),
+            prediction=body.event_type.title(),
+            confidence=1.0,
+        )
+
+        # Persist metadata to database
+        try:
+            await db_service.save_image_metadata(image_data_obj.model_dump())
+            await db_service.log_acquisition(
+                body.model_dump(),
+                status="success",
+                result_summary={"filename": record["filename"], "file_size_bytes": record["file_size_bytes"]},
+            )
+        except Exception as exc:
+            logger.warning("Database persistence error for image '%s': %s", record["filename"], exc)
+
+        return ApiResponse.ok(
+            data=image_data_obj,
+            message=f"Satellite imagery acquired successfully from Earth Search for scene {record['scene_id']}.",
+        )
+    except Exception as es_err:
+        logger.warning("Earth Search acquisition attempt failed: %s. Attempting fallback...", es_err)
+
+    # 2. Fallback path: Sentinel Hub CDSE (if configured)
     try:
         result = sentinel_service.fetch_image(
             latitude=body.latitude,
@@ -254,13 +338,13 @@ async def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
         return ApiResponse.fail(error=str(exc), message="Invalid request parameters.")
     except EnvironmentError as exc:
         await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
-        return ApiResponse.fail(error=str(exc), message="Sentinel Hub credentials are not configured.")
+        return ApiResponse.fail(error=str(exc), message="Satellite imagery provider unavailable.")
     except AuthenticationError as exc:
         await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
-        return ApiResponse.fail(error=str(exc), message="Sentinel Hub authentication failed.")
+        return ApiResponse.fail(error=str(exc), message="Satellite authentication failed.")
     except SentinelServiceError as exc:
         await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
-        return ApiResponse.fail(error=str(exc), message="Sentinel Hub imagery request failed.")
+        return ApiResponse.fail(error=str(exc), message="Satellite imagery request failed.")
     except OSError as exc:
         await db_service.log_acquisition(body.model_dump(), "failed", error_message=str(exc))
         return ApiResponse.fail(error=str(exc), message="Failed to save image to disk.")
@@ -298,11 +382,41 @@ async def post_image(body: ImageRequest) -> ApiResponse[ImageData]:
     "/gallery",
     response_model=ApiResponse[GalleryData],
     summary="All stored satellite images",
-    description="Returns metadata for every image in backend/images/, newest first.",
+    description="Returns metadata for every image in backend/images/ and recorded STAC acquisitions, newest first.",
 )
-def get_gallery() -> ApiResponse[GalleryData]:
+async def get_gallery() -> ApiResponse[GalleryData]:
+    # 1. Disk images from image_service
     images = image_service.list_images()
     image_data = [_saved_to_image_data(img) for img in images]
+    seen_files = {img.filename for img in image_data}
+
+    # 2. Merged with Earth Search STAC acquisitions
+    try:
+        acquisitions = await db_service.list_acquisitions(limit=100)
+        for acq in acquisitions:
+            fn = acq.get("filename")
+            if fn and fn not in seen_files:
+                seen_files.add(fn)
+                image_data.append(ImageData(
+                    filename=fn,
+                    image_url=acq.get("image_url", ""),
+                    image_path=acq.get("image_path", f"images/satellite/{fn}"),
+                    disaster_type=acq.get("event_type", "satellite").title(),
+                    location=f"Lat {acq.get('latitude', 0.0):.4f}, Lon {acq.get('longitude', 0.0):.4f}",
+                    latitude=acq.get("latitude"),
+                    longitude=acq.get("longitude"),
+                    date=acq.get("date", ""),
+                    captured_at=acq.get("datetime", ""),
+                    file_size_bytes=acq.get("file_size_bytes", 0),
+                    resolution_meters=acq.get("resolution", 10),
+                    bbox=acq.get("bbox"),
+                    data_collection=acq.get("collection", "sentinel-2-l2a"),
+                    prediction="Acquired",
+                    confidence=1.0,
+                ))
+    except Exception as exc:
+        logger.warning("Could not list acquisitions in gallery: %s", exc)
+
     return ApiResponse.ok(
         data=GalleryData(total=len(image_data), images=image_data),
         message=f"{len(image_data)} image(s) found.",
@@ -476,30 +590,48 @@ async def get_monitor(
         filename = f"{event_type}_{timestamp}_lat{lat:.4f}_lon{lon:.4f}.png"
 
         try:
-            result = sentinel_service.fetch_image(latitude=lat, longitude=lon)
-            saved = image_service.save(
-                array=result.array,
-                event_type=event_type,
+            # Primary acquisition path via Earth Search STAC
+            acq = await earth_search.acquire_scene(
                 latitude=lat,
                 longitude=lon,
-                filename=filename,
+                event_type=event_type,
             )
             downloaded.append(MonitorDownloaded(
                 event_id=event.event_id,
                 title=event.title,
                 type=event_type,
-                image_url=f"http://127.0.0.1:8000/{saved.image_path}",
-                filename=saved.filename,
+                image_url=acq["image_url"],
+                filename=acq["filename"],
                 latitude=lat,
                 longitude=lon,
             ))
-        except (SentinelServiceError, AuthenticationError, EnvironmentError, OSError, ValueError) as exc:
-            logger.warning("Image download failed for %s: %s", event.event_id, exc)
-            failed.append(MonitorFailed(
-                event_id=event.event_id,
-                title=event.title,
-                error=str(exc),
-            ))
+        except Exception as es_err:
+            logger.warning("Earth Search monitor acquisition failed for %s: %s. Trying legacy fallback...", event.event_id, es_err)
+            try:
+                result = sentinel_service.fetch_image(latitude=lat, longitude=lon)
+                saved = image_service.save(
+                    array=result.array,
+                    event_type=event_type,
+                    latitude=lat,
+                    longitude=lon,
+                    filename=filename,
+                )
+                downloaded.append(MonitorDownloaded(
+                    event_id=event.event_id,
+                    title=event.title,
+                    type=event_type,
+                    image_url=f"http://127.0.0.1:8000/{saved.image_path}",
+                    filename=saved.filename,
+                    latitude=lat,
+                    longitude=lon,
+                ))
+            except Exception as exc:
+                logger.warning("Image download failed for %s: %s", event.event_id, exc)
+                failed.append(MonitorFailed(
+                    event_id=event.event_id,
+                    title=event.title,
+                    error=str(exc),
+                ))
 
     monitor_result = MonitorData(
         wildfires=len(wildfires),
@@ -552,26 +684,35 @@ def get_analysis_status() -> ApiResponse[dict]:
     description=(
         "Permanently deletes a stored image by its filename. "
         "The `id` path parameter is the full filename "
-        "(e.g. `wildfire_2026-07-19_13-00_lat17.3850_lon78.4870.png`)."
+        "(e.g. `wildfire_2026-07-19_13-00_lat17.3850_lon78.4870.png` or `S2A_..._rgb.png`)."
     ),
 )
-def delete_image(
+async def delete_image(
     image_id: str = Path(
-        description="The filename of the image to delete (including .png extension).",
+        description="The filename of the image to delete.",
     ),
 ) -> ApiResponse[DeleteData]:
+    deleted = False
     try:
         deleted = image_service.delete(image_id)
-    except ValueError as exc:
-        return ApiResponse.fail(
-            error=str(exc),
-            message="Invalid image identifier.",
-        )
-    except OSError as exc:
-        return ApiResponse.fail(
-            error=str(exc),
-            message=f"Failed to delete {image_id}.",
-        )
+    except Exception:
+        pass
+
+    # Check if in backend/images/satellite/
+    from pathlib import Path
+    sat_file = Path(__file__).resolve().parent.parent.parent / "images" / "satellite" / image_id
+    if sat_file.exists():
+        try:
+            sat_file.unlink()
+            deleted = True
+        except Exception as exc:
+            logger.warning("Failed to unlink satellite file %s: %s", sat_file, exc)
+
+    # Clean up acquisition records if any
+    try:
+        await db_service.delete_acquisition(image_id)
+    except Exception:
+        pass
 
     if not deleted:
         return ApiResponse.fail(

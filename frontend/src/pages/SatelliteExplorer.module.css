@@ -197,3 +197,112 @@
   color: var(--accent-green);
 }
 
+.sceneList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sceneCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sceneCard:hover {
+  border-color: var(--accent-cyan);
+  background-color: var(--bg-subtle);
+}
+
+.sceneCardSelected {
+  border-color: var(--accent-cyan);
+  background-color: rgba(6, 182, 212, 0.08);
+  box-shadow: 0 0 0 1px var(--accent-cyan);
+}
+
+.sceneThumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #000;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sceneInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sceneId {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sceneMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.productTabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.productTab {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.productTab:hover {
+  color: var(--text-main);
+  background-color: var(--surface);
+}
+
+.productTabActive {
+  background-color: var(--surface);
+  color: var(--accent-cyan);
+  border-color: var(--border);
+  font-weight: 600;
+}
+
+.buttonRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+
