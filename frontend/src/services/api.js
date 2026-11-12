@@ -10,16 +10,16 @@ export const API_BASE_URL = "http://127.0.0.1:8000";
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 25000,
+  timeout: 60000,
 });
 
 /**
  * Perform a GET request and unwrap the `ApiResponse[T]` envelope.
  * Throws an Error with the server's message/error if success is false.
  */
-export async function apiGet(path, params = {}) {
+export async function apiGet(path, params = {}, config = {}) {
   try {
-    const res = await client.get(path, { params });
+    const res = await client.get(path, { params, ...config });
     if (!res.data || res.data.success === false) {
       const err = res.data?.error || res.data?.message || `Request to ${path} failed`;
       throw new Error(err);
@@ -37,9 +37,9 @@ export async function apiGet(path, params = {}) {
 /**
  * Perform a POST request and unwrap the `ApiResponse[T]` envelope.
  */
-export async function apiPost(path, body = {}) {
+export async function apiPost(path, body = {}, config = {}) {
   try {
-    const res = await client.post(path, body);
+    const res = await client.post(path, body, config);
     if (!res.data || res.data.success === false) {
       const err = res.data?.error || res.data?.message || `POST to ${path} failed`;
       throw new Error(err);
@@ -127,8 +127,10 @@ export function searchSatelliteScenes(params = {}) {
 }
 
 /** Acquire and composite a satellite scene (True Color, False Color, NDVI, NDWI, NBR) */
-export function acquireSatelliteScene(body = {}) {
-  return apiPost("/api/imagery/acquire", body);
+export async function acquireSatelliteScene(body = {}) {
+  // Uses extended 180s (3 minute) timeout for remote GeoTIFF streaming & index compositing
+  const res = await client.post("/api/imagery/acquire", body, { timeout: 180000 });
+  return res.data;
 }
 
 /** Fetch metadata for the most recently acquired satellite scene */
@@ -156,4 +158,5 @@ export function getMonitor(params = {}) {
   return apiGet("/api/monitor", params);
 }
 
+export { client as api };
 export default client;

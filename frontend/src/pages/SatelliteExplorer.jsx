@@ -6,6 +6,7 @@ import {
   searchSatelliteScenes,
   acquireSatelliteScene,
   getDisasters,
+  getGallery,
   getDownloadUrl,
 } from "../services/api";
 
@@ -60,7 +61,9 @@ export function SatelliteExplorer() {
   // Acquisition State
   const [acquireLoading, setAcquireLoading] = useState(false);
   const [acquireError, setAcquireError] = useState(null);
+  const [acquireSuccessMessage, setAcquireSuccessMessage] = useState(null);
   const [acquiredResult, setAcquiredResult] = useState(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
 
   // Active Multi-Product Layer: 'true_color' | 'false_color' | 'ndvi' | 'ndwi' | 'nbr'
   const [activeProduct, setActiveProduct] = useState("true_color");
@@ -171,9 +174,11 @@ export function SatelliteExplorer() {
     const sceneToAcquire = targetSceneId || selectedScene?.scene_id;
     setAcquireLoading(true);
     setAcquireError(null);
+    setAcquireSuccessMessage(null);
+    setImageLoadError(false);
 
     try {
-      const data = await acquireSatelliteScene({
+      const payload = {
         scene_id: sceneToAcquire || undefined,
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
@@ -183,11 +188,57 @@ export function SatelliteExplorer() {
         max_cloud: parseFloat(maxCloud),
         resolution: parseInt(resolution, 10),
         event_type: eventType,
-      });
-      setAcquiredResult(data);
-      setActiveProduct("true_color");
+      };
+
+      const res = await acquireSatelliteScene(payload);
+
+      // Support raw Axios response, uniform envelope { success, data, error }, or unwrapped data
+      const result =
+        res?.data && typeof res.data === "object" && "success" in res.data
+          ? res.data
+          : res;
+
+      if (result.success && result.data && (result.data.status === "completed" || result.data.image_url)) {
+        setAcquiredResult(result.data);
+        setAcquireSuccessMessage(result.message || `Acquisition successful for scene ${result.data.scene_id || result.data.filename}`);
+        setAcquireError(null);
+        setActiveProduct("true_color");
+        setImageLoadError(false);
+
+        // Secondary non-blocking operations: notify gallery and pre-sync
+        try {
+          window.dispatchEvent(new CustomEvent("orvix:acquisition-completed", { detail: result.data }));
+          getGallery().catch(() => {});
+        } catch (secondaryErr) {
+          // Secondary actions must NEVER flip acquisition to failure
+          console.warn("Secondary post-acquisition notification failed:", secondaryErr);
+        }
+      } else if (result.status === "completed" || result.image_url) {
+        // Direct unwrapped object fallback
+        setAcquiredResult(result);
+        setAcquireSuccessMessage(`Acquisition successful for scene ${result.scene_id || result.filename}`);
+        setAcquireError(null);
+        setActiveProduct("true_color");
+        setImageLoadError(false);
+
+        try {
+          window.dispatchEvent(new CustomEvent("orvix:acquisition-completed", { detail: result }));
+          getGallery().catch(() => {});
+        } catch (secondaryErr) {
+          console.warn("Secondary post-acquisition notification failed:", secondaryErr);
+        }
+      } else {
+        const errMsg = result.error || result.message || "Acquisition did not complete successfully.";
+        setAcquireError(errMsg);
+      }
     } catch (err) {
-      setAcquireError(err.message || "Satellite acquisition request failed.");
+      const serverErr =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.response?.data?.detail ||
+        err.message ||
+        "Satellite acquisition request failed.";
+      setAcquireError(serverErr);
     } finally {
       setAcquireLoading(false);
     }
@@ -446,6 +497,26 @@ export function SatelliteExplorer() {
 
         {/* Right Output View */}
         <div className={styles.previewContainer}>
+          {acquireSuccessMessage && (
+            <div className={styles.successAlert}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                <span>{acquireSuccessMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAcquireSuccessMessage(null)}
+                className={styles.alertCloseBtn}
+                title="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {acquireLoading ? (
             <div className={styles.viewerCard}>
               <div className={styles.viewerBody} style={{ flexDirection: "column", gap: "16px" }}>
@@ -478,14 +549,34 @@ export function SatelliteExplorer() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(getDownloadUrl(acquiredResult.filename), "_blank")}
+                    onClick={() => window.open(getCurrentImageUrl(), "_blank")}
+                    title="Open full-resolution image in new tab"
                   >
-                    Download Raster
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    Full Resolution
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(getDownloadUrl(acquiredResult.filename), "_blank")}
+                    title="Download raw raster or PNG"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Download
                   </Button>
                   <Button
                     variant="primary"
                     size="sm"
                     onClick={() => navigate("/gallery")}
+                    title="Inspect saved imagery in gallery"
                   >
                     View in Gallery
                   </Button>
@@ -495,39 +586,59 @@ export function SatelliteExplorer() {
               {/* Spectral Products Switcher */}
               <div className={styles.productTabs}>
                 <button
+                  type="button"
                   className={`${styles.productTab} ${activeProduct === "true_color" ? styles.productTabActive : ""}`}
-                  onClick={() => setActiveProduct("true_color")}
+                  onClick={() => {
+                    setActiveProduct("true_color");
+                    setImageLoadError(false);
+                  }}
                 >
                   True Color (RGB)
                 </button>
                 {acquiredResult.indices?.false_color && (
                   <button
+                    type="button"
                     className={`${styles.productTab} ${activeProduct === "false_color" ? styles.productTabActive : ""}`}
-                    onClick={() => setActiveProduct("false_color")}
+                    onClick={() => {
+                      setActiveProduct("false_color");
+                      setImageLoadError(false);
+                    }}
                   >
                     False Color (Infrared)
                   </button>
                 )}
                 {acquiredResult.indices?.ndvi && (
                   <button
+                    type="button"
                     className={`${styles.productTab} ${activeProduct === "ndvi" ? styles.productTabActive : ""}`}
-                    onClick={() => setActiveProduct("ndvi")}
+                    onClick={() => {
+                      setActiveProduct("ndvi");
+                      setImageLoadError(false);
+                    }}
                   >
                     NDVI (Vegetation)
                   </button>
                 )}
                 {acquiredResult.indices?.ndwi && (
                   <button
+                    type="button"
                     className={`${styles.productTab} ${activeProduct === "ndwi" ? styles.productTabActive : ""}`}
-                    onClick={() => setActiveProduct("ndwi")}
+                    onClick={() => {
+                      setActiveProduct("ndwi");
+                      setImageLoadError(false);
+                    }}
                   >
                     NDWI (Water)
                   </button>
                 )}
                 {acquiredResult.indices?.nbr && (
                   <button
+                    type="button"
                     className={`${styles.productTab} ${activeProduct === "nbr" ? styles.productTabActive : ""}`}
-                    onClick={() => setActiveProduct("nbr")}
+                    onClick={() => {
+                      setActiveProduct("nbr");
+                      setImageLoadError(false);
+                    }}
                   >
                     NBR (Burn Severity)
                   </button>
@@ -536,32 +647,72 @@ export function SatelliteExplorer() {
 
               {/* Main Image Display */}
               <div className={styles.viewerBody}>
-                <img
-                  src={getCurrentImageUrl()}
-                  alt={acquiredResult.filename}
-                  className={styles.acquiredImage}
-                />
+                {imageLoadError ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "40px 20px", textAlign: "center" }}>
+                    <div style={{ color: "var(--accent-yellow)", fontSize: "0.9rem", fontWeight: 600 }}>
+                      Image Browser Display Delay
+                    </div>
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", maxWidth: "420px" }}>
+                      Scene was acquired and verified on disk. Click below to retry rendering or view the raw raster directly.
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                      <Button variant="outline" size="sm" onClick={() => setImageLoadError(false)}>
+                        Retry Render
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={() => window.open(getCurrentImageUrl(), "_blank")}>
+                        Open Direct URL
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={getCurrentImageUrl()}
+                    alt={acquiredResult.filename || acquiredResult.scene_id}
+                    className={styles.acquiredImage}
+                    onLoad={() => setImageLoadError(false)}
+                    onError={() => {
+                      console.warn("Acquired image failed to load in browser element:", getCurrentImageUrl());
+                      setImageLoadError(true);
+                    }}
+                  />
+                )}
               </div>
 
               {/* Metadata Inspector */}
               <div className={styles.metaGrid}>
                 <div className={styles.metaItem}>
-                  <span className={styles.metaKey}>Target Center</span>
+                  <span className={styles.metaKey}>Scene ID</span>
                   <span className={`${styles.metaVal} mono`}>
-                    {acquiredResult.latitude?.toFixed(4)}, {acquiredResult.longitude?.toFixed(4)}
+                    {acquiredResult.scene_id || acquiredResult.filename}
                   </span>
                 </div>
                 <div className={styles.metaItem}>
                   <span className={styles.metaKey}>Observation Date</span>
-                  <span className={styles.metaVal}>{acquiredResult.date}</span>
-                </div>
-                <div className={styles.metaItem}>
-                  <span className={styles.metaKey}>Cloud Cover</span>
-                  <span className={styles.metaVal}>{acquiredResult.cloud_cover}%</span>
+                  <span className={styles.metaVal}>
+                    {acquiredResult.date || acquiredResult.datetime?.slice(0, 10) || "Observed"}
+                  </span>
                 </div>
                 <div className={styles.metaItem}>
                   <span className={styles.metaKey}>Satellite Platform</span>
                   <span className={styles.metaVal}>{acquiredResult.platform || "Sentinel-2"}</span>
+                </div>
+                <div className={styles.metaItem}>
+                  <span className={styles.metaKey}>Cloud Cover</span>
+                  <span className={styles.metaVal}>
+                    {acquiredResult.cloud_cover !== undefined ? `${acquiredResult.cloud_cover}%` : "0%"}
+                  </span>
+                </div>
+                <div className={styles.metaItem}>
+                  <span className={styles.metaKey}>Target Center</span>
+                  <span className={`${styles.metaVal} mono`}>
+                    {typeof acquiredResult.latitude === "number" ? acquiredResult.latitude.toFixed(4) : latitude}, {typeof acquiredResult.longitude === "number" ? acquiredResult.longitude.toFixed(4) : longitude}
+                  </span>
+                </div>
+                <div className={styles.metaItem}>
+                  <span className={styles.metaKey}>Optical Resolution</span>
+                  <span className={styles.metaVal}>
+                    {acquiredResult.resolution || resolution}m GSD
+                  </span>
                 </div>
                 <div className={styles.metaItem}>
                   <span className={styles.metaKey}>Disk Payload</span>

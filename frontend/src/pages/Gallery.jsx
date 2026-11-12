@@ -38,7 +38,7 @@ export function Gallery() {
 
   useEffect(() => {
     let ignore = false;
-    async function load() {
+    async function init() {
       try {
         const res = await getGallery();
         if (!ignore) {
@@ -55,11 +55,17 @@ export function Gallery() {
         }
       }
     }
-    load();
+    init();
+
+    function handleAcqCompleted() {
+      fetchImages();
+    }
+    window.addEventListener("orvix:acquisition-completed", handleAcqCompleted);
     return () => {
       ignore = true;
+      window.removeEventListener("orvix:acquisition-completed", handleAcqCompleted);
     };
-  }, []);
+  }, [fetchImages]);
 
   async function handleDelete(filename) {
     if (!window.confirm(`Are you sure you want to permanently delete '${filename}'?`)) {
@@ -192,6 +198,19 @@ export function Gallery() {
             Tasked Scenes
           </button>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchImages}
+          loading={loading}
+          title="Refresh gallery from disk and database"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+          </svg>
+          Refresh
+        </Button>
       </div>
 
       {/* Grid */}
