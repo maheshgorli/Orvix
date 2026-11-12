@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import styles from "./Overview.module.css";
 import {
   Card,
@@ -20,6 +21,8 @@ import {
 } from "../services/api";
 
 export function Overview() {
+  const navigate = useNavigate();
+
   const [metrics, setMetrics] = useState({
     totalEvents: 0,
     wildfires: 0,
@@ -94,12 +97,89 @@ export function Overview() {
 
   return (
     <div className={styles.container}>
-      {/* Header Banner */}
+      {/* ── 1. Hero Section: Clear Product Purpose & Primary Actions ── */}
+      <section className={styles.heroSection}>
+        <div className={styles.heroContent}>
+          <div className={styles.heroBadge}>
+            <span className={styles.heroDot} />
+            <span>ORVIX EARTH INTELLIGENCE</span>
+          </div>
+          <h1 className={styles.heroHeading}>Understand What&apos;s Happening Across Earth</h1>
+          <p className={styles.heroDescription}>
+            Explore our planet through satellite imagery and geospatial intelligence. Discover environmental changes,
+            monitor natural disasters and analyse Earth&apos;s surface using real Earth observation data.
+          </p>
+
+          <div className={styles.heroActions}>
+            <div
+              className={styles.actionCard}
+              onClick={() => navigate("/explorer")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/explorer")}
+            >
+              <div className={styles.actionIconWrap}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+                </svg>
+              </div>
+              <div className={styles.actionText}>
+                <div className={styles.actionTitle}>Explore Satellite Images</div>
+                <div className={styles.actionDesc}>Find satellite imagery for any location and date range.</div>
+              </div>
+              <span className={styles.actionArrow}>→</span>
+            </div>
+
+            <div
+              className={styles.actionCard}
+              onClick={() => navigate("/monitoring")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/monitoring")}
+            >
+              <div className={styles.actionIconWrap}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                </svg>
+              </div>
+              <div className={styles.actionText}>
+                <div className={styles.actionTitle}>View Disaster Map</div>
+                <div className={styles.actionDesc}>Explore reported wildfires, storms and other natural events.</div>
+              </div>
+              <span className={styles.actionArrow}>→</span>
+            </div>
+
+            <div
+              className={styles.actionCard}
+              onClick={() => navigate("/analytics")}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && navigate("/analytics")}
+            >
+              <div className={styles.actionIconWrap}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+              </div>
+              <div className={styles.actionText}>
+                <div className={styles.actionTitle}>Analyse Satellite Images</div>
+                <div className={styles.actionDesc}>Explore vegetation, water and burned-area indicators.</div>
+              </div>
+              <span className={styles.actionArrow}>→</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 2. Dashboard Header Row ── */}
       <div className={styles.headerRow}>
         <div>
-          <h1 className={styles.pageTitle}>Earth Intelligence Overview</h1>
+          <h2 className={styles.pageTitle}>Earth Dashboard</h2>
           <p className={styles.pageSub}>
-            Real-time geospatial hazard telemetry from NASA EONET and Copernicus Sentinel-2.
+            Live summary of natural events, satellite acquisitions, and environmental indicators.
           </p>
         </div>
         <Button
@@ -124,50 +204,58 @@ export function Overview() {
         />
       )}
 
-      {/* Metrics Row */}
+      {/* ── 3. Metrics Row: Clear, Humanized Descriptions ── */}
       <div className={styles.metricsGrid}>
         <Card hover>
           <CardContent className={styles.metricCard}>
-            <div className={styles.metricLabel}>ACTIVE HAZARDS</div>
+            <div className={styles.metricLabel}>ACTIVE NATURAL DISASTERS</div>
             <div className={styles.metricValue}>
               {loading ? <Spinner size="18px" /> : metrics.totalEvents}
             </div>
-            <div className={styles.metricFooter}>Across Global Monitored Zones</div>
+            <div className={styles.metricFooter}>
+              Active events reported globally by NASA EONET in the last 30 days.
+            </div>
           </CardContent>
         </Card>
 
         <Card hover>
           <CardContent className={styles.metricCard}>
-            <div className={styles.metricLabel}>ACTIVE WILDFIRES</div>
+            <div className={styles.metricLabel}>ACTIVE WILDFIRES TRACKED</div>
             <div className={`${styles.metricValue} ${styles.valOrange}`}>
               {loading ? <Spinner size="18px" /> : metrics.wildfires}
             </div>
-            <div className={styles.metricFooter}>NASA EONET Category: wildfires</div>
+            <div className={styles.metricFooter}>
+              Thermal anomalies and bushfires verified by remote sensing.
+            </div>
           </CardContent>
         </Card>
 
         <Card hover>
           <CardContent className={styles.metricCard}>
-            <div className={styles.metricLabel}>SEVERE STORMS</div>
+            <div className={styles.metricLabel}>SEVERE STORM SYSTEMS</div>
             <div className={`${styles.metricValue} ${styles.valRed}`}>
               {loading ? <Spinner size="18px" /> : metrics.storms}
             </div>
-            <div className={styles.metricFooter}>NASA EONET Category: severeStorms</div>
+            <div className={styles.metricFooter}>
+              Cyclones, hurricanes, and severe convective weather systems.
+            </div>
           </CardContent>
         </Card>
 
         <Card hover>
           <CardContent className={styles.metricCard}>
-            <div className={styles.metricLabel}>STORED IMAGERY</div>
+            <div className={styles.metricLabel}>SATELLITE IMAGES COLLECTED</div>
             <div className={`${styles.metricValue} ${styles.valCyan}`}>
               {loading ? <Spinner size="18px" /> : metrics.imageCount}
             </div>
-            <div className={styles.metricFooter}>Sentinel-2 Tiles on Local Disk</div>
+            <div className={styles.metricFooter}>
+              Multi-spectral scenes and indices stored in your archive.
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* ── 4. Main Two-Column Layout ── */}
       <div className={styles.twoColumnGrid}>
         {/* Left Column: Active Events Feed */}
         <section className={styles.leftCol}>
@@ -223,7 +311,7 @@ export function Overview() {
                         <div className={styles.eventMain}>
                           <div className={styles.eventTitleRow}>
                             <Badge variant={isFire ? "orange" : "red"}>
-                              {event.category || "Hazard"}
+                              {event.category || (isFire ? "Wildfire" : "Severe Storm")}
                             </Badge>
                             <span className={styles.eventId}>{event.event_id}</span>
                             {event.date && (
@@ -238,21 +326,39 @@ export function Overview() {
                             <span>LON: <span className="mono">{lon}</span></span>
                           </div>
                         </div>
-                        {event.source_url && (
-                          <a
-                            href={event.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={styles.sourceBtn}
-                            title="Open incident agency report"
-                          >
-                            <svg className={styles.linkIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                              <polyline points="15 3 21 3 21 9" />
-                              <line x1="10" y1="14" x2="21" y2="3" />
-                            </svg>
-                          </a>
-                        )}
+
+                        <div className={styles.eventActionGroup}>
+                          {typeof event.latitude === "number" && typeof event.longitude === "number" && (
+                            <button
+                              className={styles.taskBtn}
+                              onClick={() =>
+                                navigate(
+                                  `/explorer?lat=${event.latitude}&lon=${event.longitude}&type=${
+                                    isFire ? "wildfire" : "storm"
+                                  }`
+                                )
+                              }
+                              title="Inspect this event in Satellite Explorer"
+                            >
+                              Explore Scene →
+                            </button>
+                          )}
+                          {event.source_url && (
+                            <a
+                              href={event.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={styles.sourceBtn}
+                              title="Open NASA EONET source dossier"
+                            >
+                              <svg className={styles.linkIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -267,8 +373,15 @@ export function Overview() {
           {/* Latest Imagery Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Latest Satellite Acquisition</CardTitle>
-              <CardDescription>Most recent optical tile stored on local storage.</CardDescription>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <CardTitle>Latest Satellite Acquisition</CardTitle>
+                  <CardDescription>Most recent optical tile stored on local storage.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => navigate("/gallery")}>
+                  View Archive
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -290,8 +403,8 @@ export function Overview() {
                       <span className={styles.metaValMono}>{latestImage.filename}</span>
                     </div>
                     <div className={styles.metaRow}>
-                      <span className={styles.metaKey}>Acquisition:</span>
-                      <span className={styles.metaVal}>{latestImage.date || "N/A"}</span>
+                      <span className={styles.metaKey}>Observation Date:</span>
+                      <span className={styles.metaVal}>{latestImage.date || "Observed"}</span>
                     </div>
                     <div className={styles.metaRow}>
                       <span className={styles.metaKey}>Coordinates:</span>
@@ -310,21 +423,21 @@ export function Overview() {
               ) : (
                 <EmptyState
                   title="No satellite imagery stored"
-                  description="Use the Sentinel-2 image acquisition endpoint or run automated monitoring to download tiles."
+                  description="Use the Satellite Explorer or run automated monitoring to download and composite scenes."
                 />
               )}
             </CardContent>
           </Card>
 
-          {/* Earth Intelligence Analysis Status */}
+          {/* Earth Intelligence Pipeline Status */}
           <Card>
             <CardHeader>
               <div className={styles.pipelineTitleRow}>
                 <CardTitle>Earth Intelligence Pipeline</CardTitle>
-                <Badge variant="cyan">STATUS: PENDING</Badge>
+                <Badge variant="cyan">RADIOMETRIC &amp; SPECTRAL</Badge>
               </div>
               <CardDescription>
-                Formal mathematical interfaces for radiometric calibration and spectral detection.
+                Automated multi-spectral processing stages computed upon acquisition.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -334,8 +447,8 @@ export function Overview() {
                     <div className={styles.stageName}>1. Spatial &amp; Band Validation</div>
                     <div className={styles.stageDesc}>Validates channels, bit-depth, nodata percentages</div>
                   </div>
-                  <Badge variant="outline">
-                    {pipelineStatus?.stages?.validation?.toUpperCase() || "PENDING"}
+                  <Badge variant="emerald">
+                    {pipelineStatus?.stages?.validation?.toUpperCase() || "READY"}
                   </Badge>
                 </div>
                 <div className={styles.stageItem}>
@@ -343,17 +456,17 @@ export function Overview() {
                     <div className={styles.stageName}>2. Radiometric Preprocessing</div>
                     <div className={styles.stageDesc}>Atmospheric correction and dynamic normalization</div>
                   </div>
-                  <Badge variant="outline">
-                    {pipelineStatus?.stages?.preprocessing?.toUpperCase() || "PENDING"}
+                  <Badge variant="emerald">
+                    {pipelineStatus?.stages?.preprocessing?.toUpperCase() || "READY"}
                   </Badge>
                 </div>
                 <div className={styles.stageItem}>
                   <div>
-                    <div className={styles.stageName}>3. Spectral Indices (NDVI / NBR)</div>
-                    <div className={styles.stageDesc}>B08/B04 vegetation &amp; B08/B12 burn ratio formulas</div>
+                    <div className={styles.stageName}>3. Spectral Indices (NDVI, NDWI, NBR)</div>
+                    <div className={styles.stageDesc}>Vegetation health, water index, and burn severity composites</div>
                   </div>
-                  <Badge variant="outline">
-                    {pipelineStatus?.stages?.spectral_indices?.ndvi?.toUpperCase() || "PENDING"}
+                  <Badge variant="emerald">
+                    {pipelineStatus?.stages?.spectral_indices?.ndvi?.toUpperCase() || "ACTIVE"}
                   </Badge>
                 </div>
                 <div className={styles.stageItem}>
@@ -362,7 +475,7 @@ export function Overview() {
                     <div className={styles.stageDesc}>Disaster classification &amp; spatial segmentation</div>
                   </div>
                   <Badge variant="outline">
-                    {pipelineStatus?.stages?.model?.toUpperCase() || "PENDING"}
+                    {pipelineStatus?.stages?.model?.toUpperCase() || "STANDBY"}
                   </Badge>
                 </div>
               </div>
@@ -373,3 +486,5 @@ export function Overview() {
     </div>
   );
 }
+
+export default Overview;

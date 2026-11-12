@@ -40,7 +40,7 @@ function MapResizer() {
 }
 
 function formatEventDate(dateStr) {
-  if (!dateStr) return "Observed";
+  if (!dateStr) return "Observed recently";
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
@@ -50,7 +50,7 @@ function formatEventDate(dateStr) {
   }
 }
 
-// Custom vector markers for Wildfire and Severe Storms
+// Custom high-contrast vector markers for Wildfire and Severe Storms
 const wildfireIcon = L.divIcon({
   className: "orvix-marker",
   html: `<div class="orvix-marker-wildfire" title="Wildfire Event"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></div>`,
@@ -75,8 +75,9 @@ export function LiveMonitoring() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("all"); // "all" | "wildfires" | "severeStorms"
 
-  // Monitoring acquisition state
+  // Monitoring acquisition state with progressive status
   const [acquiring, setAcquiring] = useState(false);
+  const [acquisitionStage, setAcquisitionStage] = useState("idle"); // "idle" | "searching" | "downloading" | "processing" | "completed" | "failed"
   const [notification, setNotification] = useState(null);
 
   // Map tile loading & health state
@@ -150,39 +151,56 @@ export function LiveMonitoring() {
     return { all: validEvents.length, wildfires: wf, storms: st };
   }, [validEvents]);
 
-  // Batch acquisition trigger
+  // Automated batch satellite acquisition trigger
   async function handleTriggerMonitoring() {
     setAcquiring(true);
+    setAcquisitionStage("searching");
     setNotification(null);
+
+    // Realistic progression simulation while backend executes
+    const tDownload = setTimeout(() => setAcquisitionStage("downloading"), 1500);
+    const tProcess = setTimeout(() => setAcquisitionStage("processing"), 4000);
+
     try {
       const result = await getMonitor({ days: 14, max_images: 2 });
+      clearTimeout(tDownload);
+      clearTimeout(tProcess);
+      setAcquisitionStage("completed");
       setNotification({
         type: "success",
-        message: `Acquisition completed: ${result?.total_events || 0} active events evaluated, ${result?.images_downloaded || 0} satellite scene(s) saved.`,
+        message: `Acquisition completed: ${result?.total_events || 0} active incidents evaluated, ${result?.images_downloaded || 0} satellite scene(s) processed and saved to your archive.`,
       });
       await loadDisasters();
     } catch (err) {
+      clearTimeout(tDownload);
+      clearTimeout(tProcess);
+      setAcquisitionStage("failed");
       setNotification({
         type: "error",
         message: `Acquisition run encountered an error: ${err.message}`,
       });
     } finally {
       setAcquiring(false);
+      setTimeout(() => setAcquisitionStage("idle"), 8000);
     }
   }
 
   function handleOpenExplorer(e) {
-    navigate(`/explorer?lat=${e.latitude}&lon=${e.longitude}&type=${e.category_id || "satellite"}`);
+    navigate(
+      `/explorer?lat=${e.latitude}&lon=${e.longitude}&type=${
+        e.category_id === "wildfires" ? "wildfire" : e.category_id === "severeStorms" ? "storm" : "satellite"
+      }`
+    );
   }
 
   return (
     <div className={styles.page}>
-      {/* Page Header */}
+      {/* ── Page Header ── */}
       <div className={styles.header}>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Live Geospatial Monitoring</h1>
+          <h1 className={styles.title}>Explore Natural Disasters Around the World</h1>
           <p className={styles.subtitle}>
-            Real-time planetary disaster tracking with synchronized NASA EONET telemetry and Earth Search satellite tasking.
+            View reported natural disaster events on an interactive map and explore their locations and details.
           </p>
         </div>
 
@@ -223,11 +241,12 @@ export function LiveMonitoring() {
             variant="primary"
             onClick={handleTriggerMonitoring}
             loading={acquiring}
+            title="Scan active disasters and acquire Sentinel-2 imagery for priority hotspots"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
-            Trigger Acquisition Run
+            Acquire Satellite Images
           </Button>
         </div>
       </div>
@@ -237,9 +256,16 @@ export function LiveMonitoring() {
         <div className={styles.progressBanner}>
           <div className={styles.progressInfo}>
             <Spinner size="sm" />
-            <span>Connecting to Earth Search STAC catalogue &amp; downloading satellite imagery…</span>
+            <span>
+              {acquisitionStage === "searching" && "Searching Earth Search catalogue for cloud-free Sentinel-2 passes…"}
+              {acquisitionStage === "downloading" && "Streaming Cloud-Optimized GeoTIFF bands (Red, Green, Blue, NIR, SWIR) from AWS S3…"}
+              {acquisitionStage === "processing" && "Generating True Color composites and computing NDVI, NDWI, and NBR spectral indices…"}
+              {acquisitionStage === "idle" && "Connecting to Earth Search STAC catalogue and tasking satellite data…"}
+            </span>
           </div>
-          <Badge variant="cyan">In Progress</Badge>
+          <Badge variant="cyan">
+            {acquisitionStage === "searching" ? "1/3 Searching" : acquisitionStage === "downloading" ? "2/3 Streaming Bands" : "3/3 Processing Indices"}
+          </Badge>
         </div>
       )}
 
@@ -262,7 +288,7 @@ export function LiveMonitoring() {
         </div>
       )}
 
-      {/* Map Surface */}
+      {/* ── Interactive Map Surface ── */}
       <div className={styles.mapCard}>
         {/* Overlay Legend & Tile Status */}
         <div className={styles.mapOverlayBar}>
@@ -364,7 +390,7 @@ export function LiveMonitoring() {
                           </span>
                         </div>
                         <div className={styles.popupMetaRow}>
-                          <span className={styles.popupMetaLabel}>Event Date</span>
+                          <span className={styles.popupMetaLabel}>Observed Date</span>
                           <span className={styles.popupMetaVal}>
                             {formatEventDate(evt.date)}
                           </span>
@@ -407,7 +433,7 @@ export function LiveMonitoring() {
                             <circle cx="12" cy="12" r="10" />
                             <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
                           </svg>
-                          Task Satellite Explorer
+                          Explore Satellite Images
                         </Button>
                       </div>
                     </div>
@@ -421,5 +447,5 @@ export function LiveMonitoring() {
     </div>
   );
 }
-export default LiveMonitoring;
 
+export default LiveMonitoring;

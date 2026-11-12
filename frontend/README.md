@@ -49,15 +49,17 @@ npm run preview -- --port 5173
 
 ## 3. Pages & Features
 
-1. **Overview Dashboard (`Overview.jsx`)**: Active hazard totals, event distribution, recent acquisitions, latest satellite capture preview.
-2. **Live Geospatial Monitoring (`LiveMonitoring.jsx`)**: Full-screen React-Leaflet map with CartoDB Dark Matter tiles, custom vector markers for wildfires and storms, event details popup, and direct "Inspect in Explorer" tasking.
-3. **Satellite Explorer (`SatelliteExplorer.jsx`)**:
-   - **Step 1 - Search**: Discover STAC scenes via Earth Search by lat/lon, date range, collection, and max cloud cover.
-   - **Step 2 - Preview**: Instant thumbnail preview and scene asset inspection.
-   - **Step 3 - Acquire**: Download and composite selected scene.
-   - **Step 4 - Multi-Product Switcher**: Interactive tabs for True Color RGB, False Color Infrared, NDVI (Vegetation), NDWI (Water), and NBR (Burn Severity).
-   - Direct download and "View in Gallery" actions.
-4. **Image Gallery (`Gallery.jsx`)**: Grid of all saved satellite scenes, search by filename/coordinates/date, binary download streaming, and safe deletion.
-5. **Disaster Intelligence (`DisasterIntelligence.jsx`)**: Full registry of active NASA EONET events with category filtering, search, and JSON export.
-6. **Analytics (`Analytics.jsx`)**: Hemispheric distribution, temporal frequency, storage usage, and processing statistics with clear status markers.
-7. **System Health & Settings (`Settings.jsx`)**: Live diagnostics for NASA EONET, Earth Search STAC, MongoDB, Local Storage, and Processing Engine.
+1. **Earth Dashboard (`Overview.jsx`)**: Active hazard totals, event distribution, recent acquisitions, latest satellite capture preview, and quick-action access cards.
+2. **Disaster Map (`LiveMonitoring.jsx`)**: Full-screen React-Leaflet map with standard OpenStreetMap raster tiles, custom vector markers for wildfires and storms, event details popup, and direct "Explore Satellite Images" prefilled tasking.
+3. **Explore Satellite Images (`SatelliteExplorer.jsx`)**:
+   - **Step 1 - Location**: Manual coordinates with validation, landmark presets, or direct incident handoff.
+   - **Step 2 - Time Period**: Date range with satellite revisit cycle guidance.
+   - **Step 3 - Data Source**: Sentinel-2 L2A vs Landsat-8/9 C2 L2 cards.
+   - **Step 4 - Advanced**: Max cloud cover slider, spatial resolution, and classification tag.
+   - **Step 5 - Discovery**: Earth Search STAC scene search with instant metadata preview.
+   - **Step 6 - Processing**: Direct acquisition with 6-stage visual pipeline tracker.
+   - **Step 7 - Multi-Spectral Products**: True Color RGB, False Color Infrared, NDVI (Vegetation), NDWI (Water), and NBR (Burn Severity) with plain-language explanations and full mathematical formulas.
+4. **My Satellite Archive (`Gallery.jsx`)**: Grid of all saved satellite scenes, spectral product badges, search by filename/coordinates/date, binary download streaming, and safe deletion.
+5. **Disaster Insights (`DisasterIntelligence.jsx`)**: Full registry of active NASA EONET events with educational context, category filtering, search, JSON export, and space tasking.
+6. **Earth Analytics (`Analytics.jsx`)**: Hemispheric distribution, temporal frequency, storage usage, and multispectral index status with honest "not available" badges for uncalibrated ML models.
+7. **Settings & Data Sources (`Settings.jsx`)**: Live diagnostics for NASA EONET, Earth Search STAC, MongoDB/SQLite, Local Storage, and Processing Engine.

@@ -26,13 +26,13 @@ flowchart LR
     end
 
     subgraph Frontend [React + Leaflet :5173]
-        OV[Overview Dashboard]
-        LM[Live Geospatial Map]
-        SE[Satellite Explorer]
-        IG[Image Gallery]
-        DI[Disaster Intelligence]
-        AN[Planetary Analytics]
-        ST[System Health]
+        OV[Earth Dashboard]
+        LM[Disaster Map]
+        SE[Explore Satellite Images]
+        IG[My Satellite Archive]
+        DI[Disaster Insights]
+        AN[Earth Analytics]
+        ST[Settings & Data Sources]
     end
 
     NASA -->|Async concurrent events| NS
@@ -49,7 +49,7 @@ flowchart LR
 
 ## 2. Core Capabilities
 
-1. **Live Geospatial Monitoring**: Interactive map powered by React-Leaflet and CartoDB Dark Matter tiles plotting active wildfires and severe storms using distinctive custom vector markers (no emojis).
+1. **Disaster Map (Live Geospatial Monitoring)**: Interactive map powered by React-Leaflet and OpenStreetMap standard raster tiles plotting active wildfires and severe storms using distinctive custom vector markers (no emojis, no API keys required).
 2. **Provider-Independent Satellite Tasking**: Parameterized coordinate acquisition (`lat`, `lon`, date range, max cloud cover %) via Earth Search STAC accessing public Cloud-Optimized GeoTIFFs (COGs) on AWS Open Data without broken OAuth dependencies.
 3. **Multispectral Image Processing Engine**:
    - **True Color (RGB)**: Sentinel-2 B04 (Red), B03 (Green), B02 (Blue) with 2%-98% percentile contrast stretch.

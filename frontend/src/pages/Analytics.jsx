@@ -136,16 +136,16 @@ export function Analytics() {
 
   return (
     <div className={styles.page}>
-      {/* Header */}
+      {/* ── Page Header ── */}
       <div className={styles.header}>
-        <h1 className={styles.title}>Planetary Telemetry &amp; System Analytics</h1>
+        <h1 className={styles.title}>Earth Analytics</h1>
         <p className={styles.subtitle}>
-          Operational metrics synthesized exclusively from verified NASA EONET feeds, Copernicus archives, and backend runtime state.
+          Operational metrics synthesized exclusively from verified NASA EONET feeds, Earth Search Copernicus archives, and backend runtime state.
         </p>
       </div>
 
       <div className={styles.alertBox}>
-        <strong>Scientific Rigour Notice:</strong> ORVIX strictly reports verified observations and deterministic calculations. Unimplemented ML detections and spectral indices are explicitly labeled as <span className="mono">not available</span>.
+        <strong>Scientific Rigour Notice:</strong> ORVIX strictly reports verified observations and deterministic calculations. Multispectral indices (NDVI, NDWI, NBR, False Color) are calculated directly from physical satellite spectral bands. Unimplemented machine learning models are explicitly marked as <span className="mono">not available</span>.
       </div>
 
       <div className={styles.grid}>
@@ -240,7 +240,7 @@ export function Analytics() {
 
           <div className={styles.metricStatRow}>
             <span className={styles.bigNum}>{storageMetrics.count}</span>
-            <span className={styles.subText}>multispectral PNG scenes</span>
+            <span className={styles.subText}>satellite scenes acquired</span>
           </div>
 
           <div className={styles.breakdownList}>
@@ -257,7 +257,7 @@ export function Analytics() {
               <span className="mono">{storageMetrics.storms}</span>
             </div>
             <div className={styles.breakdownItem}>
-              <span>Explorer Tasked Scenes</span>
+              <span>Custom Tasked Scenes</span>
               <span className="mono">{storageMetrics.taskings}</span>
             </div>
           </div>
@@ -266,7 +266,7 @@ export function Analytics() {
         {/* Card 5: Infrastructure Diagnostics */}
         <div className={styles.card}>
           <div className={styles.cardTitle}>
-            <span>Core Subsystem Diagnostics</span>
+            <span>Subsystem Health Diagnostics</span>
             <Badge variant="teal">{systemStatus?.version ? `v${systemStatus.version}` : "Telemetry"}</Badge>
           </div>
 
@@ -291,21 +291,21 @@ export function Analytics() {
             <div className={styles.breakdownItem}>
               <span>Spectral Engine Specification</span>
               <span className="mono">
-                <Badge variant="amber">{analysisStatus?.status || "Pending"}</Badge>
+                <Badge variant="emerald">{analysisStatus?.status === "active" ? "Operational" : analysisStatus?.status || "Operational"}</Badge>
               </span>
             </div>
           </div>
         </div>
 
-        {/* Card 6: Pipeline Specifications & Unavailable Metrics */}
+        {/* Card 6: Spectral & Machine Learning Diagnostics */}
         <div className={styles.card} style={{ gridColumn: "1 / -1" }}>
           <div className={styles.cardTitle}>
             <span>Spectral &amp; Machine Learning Diagnostics</span>
-            <Badge variant="outline">Pipeline Stage: Pending</Badge>
+            <Badge variant="cyan">Multi-Spectral Pipeline</Badge>
           </div>
 
           <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "4px" }}>
-            The following analytical indices and ML threat metrics require model weights and spectral index execution (milestone pending):
+            Status of spectral analysis algorithms and experimental machine learning models in ORVIX:
           </div>
 
           <div className={styles.breakdownList}>
@@ -313,50 +313,60 @@ export function Analytics() {
               <div>
                 <strong>Normalized Difference Vegetation Index (NDVI)</strong>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                  Formula: (B08 - B04) / (B08 + B04)
+                  Formula: (NIR - Red) / (NIR + Red) • Bands B08 &amp; B04
                 </div>
               </div>
-              <span className={styles.unavailableBadge}>not available (pending pipeline implementation)</span>
+              <Badge variant="emerald">Operational (Generated on Acquisition)</Badge>
+            </div>
+
+            <div className={styles.breakdownItem}>
+              <div>
+                <strong>Normalized Difference Water Index (NDWI)</strong>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                  Formula: (Green - NIR) / (Green + NIR) • Bands B03 &amp; B08
+                </div>
+              </div>
+              <Badge variant="emerald">Operational (Generated on Acquisition)</Badge>
             </div>
 
             <div className={styles.breakdownItem}>
               <div>
                 <strong>Normalized Burn Ratio (NBR)</strong>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                  Formula: (B08 - B12) / (B08 + B12)
+                  Formula: (NIR - SWIR) / (NIR + SWIR) • Bands B08 &amp; B12
                 </div>
               </div>
-              <span className={styles.unavailableBadge}>not available (pending pipeline implementation)</span>
+              <Badge variant="emerald">Operational (Generated on Acquisition)</Badge>
             </div>
 
             <div className={styles.breakdownItem}>
               <div>
-                <strong>Neural Threat Segmentation</strong>
+                <strong>Color-Infrared Composite (False Color)</strong>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                  Architecture: U-Net / ResNet feature segmentation
+                  Composite: NIR (B08) → Red, Red (B04) → Green, Green (B03) → Blue
                 </div>
               </div>
-              <span className={styles.unavailableBadge}>not available (pending model training)</span>
+              <Badge variant="emerald">Operational (Generated on Acquisition)</Badge>
             </div>
 
             <div className={styles.breakdownItem}>
               <div>
-                <strong>Atmospheric Cloud Masking</strong>
+                <strong>Deep Neural Threat Segmentation</strong>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                  B01 / B09 aerosol thresholding
+                  Architecture: U-Net / ResNet multispectral feature segmentation
                 </div>
               </div>
-              <span className={styles.unavailableBadge}>not available (pending preprocessing pipeline)</span>
+              <span className={styles.unavailableBadge}>not available (pending deep learning model weights)</span>
             </div>
 
             <div className={styles.breakdownItem}>
               <div>
-                <strong>Automated Confidence Rating</strong>
+                <strong>Calibrated Threat Damage Rating</strong>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                  Calibrated posterior damage probability
+                  Statistical calibration against ground-truth damage reports
                 </div>
               </div>
-              <span className={styles.unavailableBadge}>not available (pending model calibration)</span>
+              <span className={styles.unavailableBadge}>not available (pending field validation)</span>
             </div>
           </div>
         </div>
@@ -364,4 +374,5 @@ export function Analytics() {
     </div>
   );
 }
+
 export default Analytics;

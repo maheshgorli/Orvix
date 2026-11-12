@@ -70,7 +70,7 @@ async function verifyLiveMonitoring() {
   const hasOsmAttr = code.includes("OpenStreetMap") && code.includes("contributors");
   const hasNoCarto = !code.includes("basemaps.cartocdn.com");
   const hasMapResizer = code.includes("<MapResizer />") || code.includes("MapResizer");
-  const hasPrefilledTaskButton = code.includes("handleOpenExplorer") && code.includes("Task Satellite Explorer");
+  const hasPrefilledTaskButton = code.includes("handleOpenExplorer") && (code.includes("Task Satellite Explorer") || code.includes("Explore Satellite Images"));
 
   console.log(`  - OSM Tile URL configured:        ${hasOsmUrl ? "✔ YES" : "✖ NO"}`);
   console.log(`  - OSM Attribution configured:     ${hasOsmAttr ? "✔ YES" : "✖ NO"}`);

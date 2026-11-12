@@ -68,14 +68,14 @@ export function Gallery() {
   }, [fetchImages]);
 
   async function handleDelete(filename) {
-    if (!window.confirm(`Are you sure you want to permanently delete '${filename}'?`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete '${filename}' from your local disk archive?`)) {
       return;
     }
     setDeletingId(filename);
     try {
       await deleteImage(filename);
       setImages((prev) => prev.filter((img) => img.filename !== filename));
-      setStatusMessage({ type: "success", text: `Deleted '${filename}' from disk archive.` });
+      setStatusMessage({ type: "success", text: `Permanently deleted '${filename}' from local storage.` });
     } catch (err) {
       setStatusMessage({ type: "error", text: `Deletion failed: ${err.message}` });
     } finally {
@@ -107,12 +107,12 @@ export function Gallery() {
 
   return (
     <div className={styles.page}>
-      {/* Header */}
+      {/* ── Page Header ── */}
       <div className={styles.header}>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Satellite Imagery Archive</h1>
+          <h1 className={styles.title}>My Satellite Archive</h1>
           <p className={styles.subtitle}>
-            Verified satellite acquisitions and multispectral composites preserved on local storage.
+            All satellite images acquired through ORVIX, organised by location, date and satellite source.
           </p>
         </div>
 
@@ -149,14 +149,14 @@ export function Gallery() {
           <span>{statusMessage.text}</span>
           <button
             onClick={() => setStatusMessage(null)}
-            style={{ color: "inherit", cursor: "pointer", background: "none", border: "none" }}
+            style={{ color: "inherit", cursor: "pointer", background: "none", border: "none", fontSize: "1.1rem" }}
           >
             ×
           </button>
         </div>
       )}
 
-      {/* Toolbar */}
+      {/* ── Toolbar: Search, Filters & Refresh ── */}
       <div className={styles.toolbar}>
         <div className={styles.searchBox}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2">
@@ -166,7 +166,7 @@ export function Gallery() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search by filename, date, coordinates…"
+            placeholder="Search archive by filename, date, coordinates…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -177,7 +177,7 @@ export function Gallery() {
             className={`${styles.filterBtn} ${filterType === "all" ? styles.filterBtnActive : ""}`}
             onClick={() => setFilterType("all")}
           >
-            All ({images.length})
+            All Images ({images.length})
           </button>
           <button
             className={`${styles.filterBtn} ${filterType === "wildfire" ? styles.filterBtnActive : ""}`}
@@ -204,7 +204,7 @@ export function Gallery() {
           size="sm"
           onClick={fetchImages}
           loading={loading}
-          title="Refresh gallery from disk and database"
+          title="Refresh archive from disk and database"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
@@ -213,26 +213,26 @@ export function Gallery() {
         </Button>
       </div>
 
-      {/* Grid */}
+      {/* ── Imagery Grid ── */}
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
           <Spinner size="lg" />
         </div>
       ) : error ? (
         <ErrorState
-          title="Archive Retrieval Error"
+          title="Archive Retrieval Notice"
           message={error}
           onRetry={fetchImages}
         />
       ) : filteredImages.length === 0 ? (
         <EmptyState
-          title="No Images Found"
+          title="No Satellite Images in Archive"
           description={
             images.length === 0
-              ? "No satellite imagery has been acquired or saved to disk yet."
-              : "No imagery matches the current filter or search criteria."
+              ? "You haven't acquired or saved any satellite scenes yet. Open Explore Satellite Images to discover and download Sentinel-2 imagery."
+              : "No imagery matches the current filter or search query. Try resetting your search filter."
           }
-          actionLabel="Acquire Sentinel-2 Scene"
+          actionLabel="Explore Satellite Images"
           onAction={() => navigate("/explorer")}
         />
       ) : (
@@ -253,18 +253,26 @@ export function Gallery() {
                     className={styles.image}
                     loading="lazy"
                   />
-                </div>
-
-                <div className={styles.cardBody}>
-                  <div className={styles.cardHeader}>
+                  <div className={styles.imageOverlayTop}>
                     <Badge variant={badgeVariant}>{img.disaster_type || "Satellite"}</Badge>
-                    <span className="mono" style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                    <span className="mono" style={{ fontSize: "0.72rem", background: "rgba(0,0,0,0.6)", padding: "2px 6px", borderRadius: "4px" }}>
                       {formatBytes(img.file_size_bytes)}
                     </span>
                   </div>
+                </div>
 
+                <div className={styles.cardBody}>
                   <div className={styles.filename} title={img.filename}>
                     {img.filename}
+                  </div>
+
+                  {/* Spectral Products Indicator Pills */}
+                  <div className={styles.productsPillsRow}>
+                    <span className={styles.productPill}>RGB True Color</span>
+                    <span className={styles.productPill}>NIR False Color</span>
+                    <span className={styles.productPill}>NDVI</span>
+                    <span className={styles.productPill}>NDWI</span>
+                    <span className={styles.productPill}>NBR</span>
                   </div>
 
                   <div className={styles.metaRow}>
@@ -275,7 +283,7 @@ export function Gallery() {
                       Observed: {img.date || (img.captured_at ? new Date(img.captured_at).toUTCString() : "Timestamped")}
                     </div>
                     <div style={{ color: "var(--text-dim)" }}>
-                      Source: {img.data_collection ? img.data_collection.toUpperCase() : "Sentinel-2 L2A"}
+                      Collection: {img.data_collection ? img.data_collection.toUpperCase() : "Sentinel-2 L2A"} • {img.resolution_meters || 10}m GSD
                     </div>
                   </div>
                 </div>
@@ -285,11 +293,19 @@ export function Gallery() {
                     className={styles.deleteBtn}
                     onClick={() => handleDelete(img.filename)}
                     disabled={deletingId === img.filename}
+                    title="Delete permanently from disk storage"
                   >
                     {deletingId === img.filename ? "Deleting…" : "Delete"}
                   </button>
 
                   <div className={styles.actionBtns}>
+                    <button
+                      className={styles.downloadLink}
+                      onClick={() => window.open(imageUrl, "_blank")}
+                      title="Open full resolution composite in new tab"
+                    >
+                      View Full
+                    </button>
                     {img.latitude != null && img.longitude != null && (
                       <button
                         className={styles.downloadLink}
@@ -305,6 +321,7 @@ export function Gallery() {
                       className={styles.downloadLink}
                       target="_blank"
                       rel="noreferrer"
+                      title="Download binary raster or PNG"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -323,4 +340,5 @@ export function Gallery() {
     </div>
   );
 }
+
 export default Gallery;

@@ -75,7 +75,7 @@ export function DisasterIntelligence() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(filteredEvents, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `orvix_disaster_intel_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `orvix_disaster_insights_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -83,16 +83,16 @@ export function DisasterIntelligence() {
 
   return (
     <div className={styles.page}>
-      {/* Header */}
+      {/* ── Page Header ── */}
       <div className={styles.header}>
         <div className={styles.titleArea}>
-          <h1 className={styles.title}>Disaster Intelligence Directory</h1>
+          <h1 className={styles.title}>Disaster Insights</h1>
           <p className={styles.subtitle}>
-            Comprehensive planetary event registry ingested directly from NASA Earth Observatory Natural Event Tracker.
+            Comprehensive planetary event registry ingested directly from NASA Earth Observatory Natural Event Tracker (EONET v3).
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <Button variant="outline" onClick={handleExportJSON} disabled={filteredEvents.length === 0}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -105,31 +105,71 @@ export function DisasterIntelligence() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
             </svg>
-            Live Geospatial Map
+            View Disaster Map
           </Button>
         </div>
       </div>
 
-      {/* Metrics Row */}
+      {/* ── Educational Explainer Banner ── */}
+      <div
+        style={{
+          backgroundColor: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-md)",
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "14px",
+        }}
+      >
+        <div
+          style={{
+            width: "32px",
+            height: "32px",
+            borderRadius: "6px",
+            backgroundColor: "rgba(6, 182, 212, 0.12)",
+            color: "var(--accent-cyan)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            marginTop: "2px",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+        </div>
+        <div style={{ fontSize: "0.84rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+          <strong style={{ color: "var(--text-main)", display: "block", marginBottom: "2px" }}>
+            Factual Observational Data, Not AI Predictions
+          </strong>
+          Every event listed below represents a verified physical disaster catalogued by NASA EONET in partnership with global monitoring agencies (InciWeb, IRWIN, Joint Typhoon Warning Center, and National Hurricane Center). Click <strong>Explore This Location from Space</strong> to immediately acquire fresh Sentinel-2 or Landsat satellite imagery over any event.
+        </div>
+      </div>
+
+      {/* ── Metrics Row ── */}
       <div className={styles.metricsRow}>
         <div className={styles.metricCard}>
           <span className={styles.metricLabel}>Total Tracked Incidents</span>
           <span className={styles.metricVal}>{counts.total}</span>
-          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>NASA EONET v3 Feed</span>
+          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>NASA EONET v3 Feed (Past 60 Days)</span>
         </div>
         <div className={styles.metricCard}>
           <span className={styles.metricLabel}>Active Wildfires</span>
           <span className={styles.metricVal} style={{ color: "var(--accent-amber)" }}>{counts.wildfires}</span>
-          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>IRWIN / InciWeb sources</span>
+          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>IRWIN / InciWeb Ground &amp; Satellite Reports</span>
         </div>
         <div className={styles.metricCard}>
           <span className={styles.metricLabel}>Severe Storms</span>
           <span className={styles.metricVal} style={{ color: "var(--accent-cyan)" }}>{counts.storms}</span>
-          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>JTWC / NHC bulletins</span>
+          <span style={{ fontSize: "0.74rem", color: "var(--text-dim)" }}>JTWC / NHC Tropical Cyclones &amp; Typhoons</span>
         </div>
       </div>
 
-      {/* Toolbar */}
+      {/* ── Toolbar: Search & Filters ── */}
       <div className={styles.toolbar}>
         <div className={styles.searchBox}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2">
@@ -139,7 +179,7 @@ export function DisasterIntelligence() {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Search events by name, ID, or coordinates…"
+            placeholder="Search events by title, ID, or coordinates…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -167,21 +207,21 @@ export function DisasterIntelligence() {
         </div>
       </div>
 
-      {/* Event Table */}
+      {/* ── Event Table ── */}
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
           <Spinner size="lg" />
         </div>
       ) : error ? (
         <ErrorState
-          title="NASA EONET Ingestion Error"
+          title="NASA EONET Ingestion Notice"
           message={error}
           onRetry={loadData}
         />
       ) : filteredEvents.length === 0 ? (
         <EmptyState
           title="No Matching Events Found"
-          description="Try broadening your search criteria or resetting category filters."
+          description="Try broadening your search criteria or resetting the category filters."
         />
       ) : (
         <div className={styles.tableCard}>
@@ -194,8 +234,8 @@ export function DisasterIntelligence() {
                   <th className={styles.th}>Incident Title</th>
                   <th className={styles.th}>Coordinates (Lat, Lon)</th>
                   <th className={styles.th}>Detection Date</th>
-                  <th className={styles.th}>Source Dossier</th>
-                  <th className={styles.th}>Tasking</th>
+                  <th className={styles.th}>NASA Source</th>
+                  <th className={styles.th}>Satellite Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,7 +277,7 @@ export function DisasterIntelligence() {
                         )}
                       </td>
                       <td className={styles.td}>
-                        {typeof evt.latitude === "number" && typeof evt.longitude === "number" && (
+                        {typeof evt.latitude === "number" && typeof evt.longitude === "number" ? (
                           <button
                             className={styles.actionLink}
                             onClick={() =>
@@ -247,10 +287,24 @@ export function DisasterIntelligence() {
                                 }`
                               )
                             }
-                            title="Task Sentinel-2 acquisition for this incident"
+                            title="Acquire satellite imagery for this incident"
+                            style={{
+                              background: "rgba(6, 182, 212, 0.08)",
+                              border: "1px solid rgba(6, 182, 212, 0.25)",
+                              borderRadius: "4px",
+                              padding: "4px 8px",
+                              cursor: "pointer",
+                            }}
                           >
-                            Inspect Scene →
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            Explore from Space
                           </button>
+                        ) : (
+                          <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>No Coordinates</span>
                         )}
                       </td>
                     </tr>
@@ -264,5 +318,5 @@ export function DisasterIntelligence() {
     </div>
   );
 }
-export default DisasterIntelligence;
 
+export default DisasterIntelligence;
