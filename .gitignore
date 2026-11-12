@@ -6,3 +6,30 @@ __pycache__/
 backend/.env
 .DS_Store
 dist/
+# Satellite imagery and downloads
+satellite_rgb/
+satellite_test_downloads/
+satellite_downloads/
+
+# Large satellite raster files
+*.tif
+*.tiff
+*.geotiff
+
+# Python environments
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Node dependencies
+node_modules/
+
+# Build files
+dist/
+build/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
