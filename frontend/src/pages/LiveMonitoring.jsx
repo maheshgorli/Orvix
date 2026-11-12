@@ -1,10 +1,54 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import styles from "./LiveMonitoring.module.css";
 import { Button, Badge, Spinner, ErrorState } from "../components/ui";
 import { getDisasters, getMonitor } from "../services/api";
+
+/**
+ * Controller sub-component to ensure Leaflet invalidates and resizes correctly
+ * when navigating to the Live Monitoring page or resizing the browser viewport.
+ */
+function MapResizer() {
+  const map = useMap();
+
+  useEffect(() => {
+    map.invalidateSize();
+
+    const t1 = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
+    const t2 = setTimeout(() => {
+      map.invalidateSize();
+    }, 450);
+
+    const handleResize = () => {
+      map.invalidateSize();
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [map]);
+
+  return null;
+}
+
+function formatEventDate(dateStr) {
+  if (!dateStr) return "Observed";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toUTCString();
+  } catch {
+    return dateStr;
+  }
+}
 
 // Custom vector markers for Wildfire and Severe Storms
 const wildfireIcon = L.divIcon({
@@ -34,6 +78,10 @@ export function LiveMonitoring() {
   // Monitoring acquisition state
   const [acquiring, setAcquiring] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Map tile loading & health state
+  const [tilesLoading, setTilesLoading] = useState(true);
+  const [tileError, setTileError] = useState(false);
 
   const loadDisasters = useCallback(async () => {
     setError(null);
@@ -216,7 +264,7 @@ export function LiveMonitoring() {
 
       {/* Map Surface */}
       <div className={styles.mapCard}>
-        {/* Overlay Legend */}
+        {/* Overlay Legend & Tile Status */}
         <div className={styles.mapOverlayBar}>
           <div className={styles.legendItem}>
             <span className={styles.legendDotWildfire} />
@@ -227,7 +275,24 @@ export function LiveMonitoring() {
             <span>Severe Storm ({counts.storms})</span>
           </div>
           <div className={styles.legendItem}>
-            <span className="mono">CartoDB Dark Matter</span>
+            <div className={styles.tileStatusPill}>
+              <span
+                className={`${styles.tileStatusDot} ${
+                  tileError
+                    ? styles.tileStatusDotError
+                    : tilesLoading
+                    ? styles.tileStatusDotLoading
+                    : ""
+                }`}
+              />
+              <span className="mono">
+                {tileError
+                  ? "OSM (Degraded)"
+                  : tilesLoading
+                  ? "OSM (Loading…)"
+                  : "OpenStreetMap Standard"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -241,16 +306,31 @@ export function LiveMonitoring() {
           </div>
         ) : (
           <MapContainer
-            center={[25, 0]}
+            center={[20, 0]}
             zoom={2.5}
             minZoom={2}
-            maxZoom={14}
+            maxZoom={19}
             className={styles.mapContainer}
             scrollWheelZoom={true}
           >
+            <MapResizer />
             <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={19}
+              subdomains={["a", "b", "c"]}
+              eventHandlers={{
+                loading: () => setTilesLoading(true),
+                load: () => {
+                  setTilesLoading(false);
+                  setTileError(false);
+                },
+                tileerror: (err) => {
+                  console.warn("Map tile failed to load:", err);
+                  setTilesLoading(false);
+                  setTileError(true);
+                },
+              }}
             />
 
             {filteredEvents.map((evt) => {
@@ -276,12 +356,28 @@ export function LiveMonitoring() {
 
                       <div className={styles.popupTitle}>{evt.title}</div>
 
-                      <div className={styles.popupMeta}>
-                        <div className="mono">
-                          Coordinates: {evt.latitude.toFixed(4)}, {evt.longitude.toFixed(4)}
+                      <div className={styles.popupMetaGrid}>
+                        <div className={styles.popupMetaRow}>
+                          <span className={styles.popupMetaLabel}>Category</span>
+                          <span className={styles.popupMetaVal}>
+                            {evt.category || (isWildfire ? "Wildfires" : "Severe Storms")}
+                          </span>
                         </div>
-                        <div>
-                          Detected: {evt.date ? new Date(evt.date).toUTCString() : "Unknown"}
+                        <div className={styles.popupMetaRow}>
+                          <span className={styles.popupMetaLabel}>Event Date</span>
+                          <span className={styles.popupMetaVal}>
+                            {formatEventDate(evt.date)}
+                          </span>
+                        </div>
+                        <div className={styles.popupMetaRow}>
+                          <span className={styles.popupMetaLabel}>Coordinates</span>
+                          <span className={`${styles.popupMetaVal} mono`}>
+                            {evt.latitude.toFixed(4)}°, {evt.longitude.toFixed(4)}°
+                          </span>
+                        </div>
+                        <div className={styles.popupMetaRow}>
+                          <span className={styles.popupMetaLabel}>Source</span>
+                          <span className={styles.popupMetaVal}>NASA EONET v3</span>
                         </div>
                       </div>
 
@@ -291,8 +387,9 @@ export function LiveMonitoring() {
                           target="_blank"
                           rel="noreferrer"
                           className={styles.popupLink}
+                          title="Open official event report on NASA EONET"
                         >
-                          NASA EONET Source Dossier
+                          <span>NASA EONET Source Dossier</span>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                           </svg>
@@ -301,15 +398,16 @@ export function LiveMonitoring() {
 
                       <div className={styles.popupActions}>
                         <Button
-                          variant="outline"
+                          variant="primary"
                           size="sm"
                           onClick={() => handleOpenExplorer(evt)}
+                          title="Task Earth Search satellite acquisition at these coordinates"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <circle cx="12" cy="12" r="10" />
                             <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
                           </svg>
-                          Inspect in Explorer
+                          Task Satellite Explorer
                         </Button>
                       </div>
                     </div>
