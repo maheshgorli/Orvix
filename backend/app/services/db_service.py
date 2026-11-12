@@ -394,6 +394,127 @@ class _DatabaseService:
             return False
 
 
+    # ── 7. Satellite Acquisitions ─────────────────────────────────────────────
+
+    async def save_acquisition(self, acquisition_data: dict[str, Any]) -> bool:
+        """
+        Store a satellite acquisition record.
+        Saves to MongoDB if configured, and also persists to backend/data/acquisitions.json.
+        """
+        import json
+        from pathlib import Path
+        data_file = Path(__file__).resolve().parent.parent.parent / "data" / "acquisitions.json"
+        data_file.parent.mkdir(parents=True, exist_ok=True)
+
+        doc = dict(acquisition_data)
+        doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if "created_at" not in doc:
+            doc["created_at"] = doc["updated_at"]
+
+        # 1. Update local JSON store
+        try:
+            records = []
+            if data_file.exists():
+                try:
+                    records = json.loads(data_file.read_text(encoding="utf-8"))
+                except Exception:
+                    records = []
+            # Deduplicate by acquisition_id or scene_id
+            acq_id = doc.get("acquisition_id") or doc.get("scene_id")
+            records = [r for r in records if (r.get("acquisition_id") != acq_id and r.get("scene_id") != acq_id)]
+            records.insert(0, doc)
+            data_file.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Failed to write acquisition to local json: %s", exc)
+
+        # 2. Write to MongoDB if available
+        db = self.get_database()
+        if db is not None:
+            try:
+                acq_id = doc.get("acquisition_id") or doc.get("scene_id")
+                await db.acquisitions.update_one(
+                    {"acquisition_id": acq_id},
+                    {"$set": doc, "$setOnInsert": {"created_at": doc["created_at"]}},
+                    upsert=True,
+                )
+                return True
+            except PyMongoError as exc:
+                logger.warning("Failed to save acquisition to MongoDB: %s", exc)
+
+        return True
+
+    async def list_acquisitions(self, limit: int = 100) -> list[dict[str, Any]]:
+        """List acquisition records, newest first."""
+        import json
+        from pathlib import Path
+        data_file = Path(__file__).resolve().parent.parent.parent / "data" / "acquisitions.json"
+
+        # Try MongoDB first if connected
+        db = self.get_database()
+        if db is not None:
+            try:
+                cursor = db.acquisitions.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
+                docs = await cursor.to_list(length=limit)
+                if docs:
+                    return docs
+            except PyMongoError as exc:
+                logger.warning("Failed to list acquisitions from MongoDB: %s", exc)
+
+        # Fallback to local file store
+        if data_file.exists():
+            try:
+                records = json.loads(data_file.read_text(encoding="utf-8"))
+                return records[:limit]
+            except Exception as exc:
+                logger.warning("Failed to read local acquisitions.json: %s", exc)
+
+        return []
+
+    async def get_acquisition_by_id(self, acq_id: str) -> Optional[dict[str, Any]]:
+        """Find acquisition by acquisition_id or scene_id."""
+        db = self.get_database()
+        if db is not None:
+            try:
+                doc = await db.acquisitions.find_one(
+                    {"$or": [{"acquisition_id": acq_id}, {"scene_id": acq_id}]},
+                    {"_id": 0},
+                )
+                if doc:
+                    return doc
+            except PyMongoError:
+                pass
+
+        # Fallback to local JSON
+        records = await self.list_acquisitions(limit=500)
+        for r in records:
+            if r.get("acquisition_id") == acq_id or r.get("scene_id") == acq_id:
+                return r
+        return None
+
+    async def delete_acquisition(self, acq_id: str) -> bool:
+        """Delete an acquisition record by ID."""
+        import json
+        from pathlib import Path
+        data_file = Path(__file__).resolve().parent.parent.parent / "data" / "acquisitions.json"
+
+        if data_file.exists():
+            try:
+                records = json.loads(data_file.read_text(encoding="utf-8"))
+                records = [r for r in records if r.get("acquisition_id") != acq_id and r.get("scene_id") != acq_id]
+                data_file.write_text(json.dumps(records, indent=2), encoding="utf-8")
+            except Exception as exc:
+                logger.warning("Failed to update local acquisitions.json on delete: %s", exc)
+
+        db = self.get_database()
+        if db is not None:
+            try:
+                await db.acquisitions.delete_one({"$or": [{"acquisition_id": acq_id}, {"scene_id": acq_id}]})
+            except PyMongoError:
+                pass
+
+        return True
+
+
 #: Module-level database service singleton
 db_service = _DatabaseService()
 
